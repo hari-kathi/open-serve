@@ -1,0 +1,4 @@
+# Dev/test deps for runtimes/vllm (model_source unit tests only — the
+# tests need neither ray nor vllm).
+fsspec>=2024.6.0
+pytest>=8.0

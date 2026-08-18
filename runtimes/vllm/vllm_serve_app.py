@@ -75,16 +75,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-from typing import Any, Dict
-from urllib.parse import urlparse
+from typing import Any
 
+from ray import serve
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp
-
-from ray import serve
-
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.entrypoints.openai.api_server import (
     build_app,
@@ -92,6 +88,7 @@ from vllm.entrypoints.openai.api_server import (
     init_app_state,
 )
 from vllm.entrypoints.openai.cli_args import make_arg_parser
+
 # vllm.utils became a package in 0.19; FlexibleArgumentParser is now in
 # the argparse_utils submodule. The flat `from vllm.utils import …` path
 # the research write-up used no longer resolves.
@@ -99,15 +96,7 @@ from vllm.utils.argparse_utils import FlexibleArgumentParser
 
 _log = logging.getLogger(__name__)
 
-# Local cache root for weights staged from gs:// / s3:// / etc.
-# Persists for the worker pod's lifetime so a Ray Serve replica restart
-# inside the same pod reuses the download instead of re-fetching.
-_MODEL_CACHE_ROOT = "/tmp/models"
-
-
-# TODO(open-serve): replace the gs:// mirror in _resolve_model_source with an
-# fsspec-based resolver (s3://, az://, hf://)
-def _resolve_model_source(cli_args: Dict[str, Any]) -> Dict[str, Any]:
+def _resolve_model_source(cli_args: dict[str, Any]) -> dict[str, Any]:
     """Mirror Ray Serve LLM's model_source convention for plain vLLM.
 
     `model_source` is not a vLLM CLI flag. Ray Serve LLM (which we are
@@ -116,76 +105,31 @@ def _resolve_model_source(cli_args: Dict[str, Any]) -> Dict[str, Any]:
     path before invoking the engine. We replicate the behavior here so
     `serveModels.<name>.vllmArgs.model_source: gs://...` keeps working.
 
-    Supported forms:
-      - `gs://<bucket>/<prefix>` — mirror via google-cloud-storage SDK
-        (uses Workload Identity on the open-serve-worker ServiceAccount).
-      - local path (`/...` or `./...`) — pass through as-is.
-      - missing — no-op; vLLM's `--model` is whatever it was.
+    Thin wrapper: the actual resolution lives in `model_source.py`
+    (fsspec-based — gs://, s3://, az://, abfs://, hf://, local paths;
+    see that module for the supported schemes and caching semantics).
+    Remote sources are mirrored under /tmp/models, idempotently: files
+    already present at the expected size are skipped, so a replica
+    restart in the same pod reuses the cache.
 
     After this returns, the cli_args dict has `model_source` removed and
     `model` rewritten to the local path (or untouched if model_source
-    was absent). Idempotent: blobs already present at the expected size
-    are skipped, so a replica restart in the same pod reuses the cache.
+    was absent).
     """
     cli_args = dict(cli_args or {})
     source = cli_args.pop("model_source", None)
     if not source:
         return cli_args
-    if not isinstance(source, str):
-        raise ValueError(
-            f"model_source must be a string URI, got {type(source).__name__}"
-        )
-    if not source.startswith("gs://"):
-        # Local path or other scheme we don't handle — assume it's
-        # already accessible at that path and let vLLM open it.
-        cli_args["model"] = source
-        return cli_args
 
-    parsed = urlparse(source)
-    bucket_name = parsed.netloc
-    prefix = parsed.path.lstrip("/")
-    name = prefix.rstrip("/").split("/")[-1] or bucket_name
-    dest_dir = os.path.join(_MODEL_CACHE_ROOT, name)
-    os.makedirs(dest_dir, exist_ok=True)
+    # Lazy import so the build-time `import vllm_serve_app` smoke check
+    # in the Dockerfile stays dependency-light.
+    from model_source import resolve_model_source
 
-    # Imported lazily so the build-time `import vllm_serve_app` smoke
-    # check in the Dockerfile doesn't require GCP creds.
-    from google.cloud import storage
-
-    client = storage.Client()
-    blobs = list(client.list_blobs(bucket_name, prefix=prefix))
-    if not blobs:
-        raise FileNotFoundError(
-            f"no blobs at {source}; check bucket/prefix and SA permissions"
-        )
-
-    total_bytes = 0
-    skipped = 0
-    for blob in blobs:
-        if blob.name.endswith("/"):
-            continue
-        rel = blob.name[len(prefix):].lstrip("/")
-        if not rel:
-            rel = os.path.basename(blob.name)
-        dst = os.path.join(dest_dir, rel)
-        parent = os.path.dirname(dst)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        if os.path.exists(dst) and os.path.getsize(dst) == (blob.size or 0):
-            skipped += 1
-            continue
-        blob.download_to_filename(dst)
-        total_bytes += blob.size or 0
-
-    _log.info(
-        "model_source %s mirrored to %s: downloaded=%d bytes, skipped=%d blobs",
-        source, dest_dir, total_bytes, skipped,
-    )
-    cli_args["model"] = dest_dir
+    cli_args["model"] = resolve_model_source(source)
     return cli_args
 
 
-def _parse_vllm_args(cli_args: Dict[str, Any]):
+def _parse_vllm_args(cli_args: dict[str, Any]):
     """Flatten a dict of vLLM args into argparse via vLLM's own CLI parser.
 
     Keys are converted from snake_case to --kebab-case. Booleans become
@@ -249,7 +193,7 @@ async def _asgi_passthrough(asgi_app: ASGIApp, request: Request) -> Response:
     scope["app"] = asgi_app
     scope.pop("state", None)  # let Starlette create a fresh per-request State
 
-    async def send(message: Dict[str, Any]) -> None:
+    async def send(message: dict[str, Any]) -> None:
         msg_type = message.get("type")
         if msg_type == "http.response.start":
             if not response_started.done():
@@ -259,7 +203,7 @@ async def _asgi_passthrough(asgi_app: ASGIApp, request: Request) -> Response:
         # Lifespan and other message types are ignored — Ray Serve manages
         # actor lifecycle, not vLLM's FastAPI lifespan events.
 
-    async def receive() -> Dict[str, Any]:
+    async def receive() -> dict[str, Any]:
         return await request.receive()
 
     task = asyncio.create_task(asgi_app(scope, receive, send))
@@ -330,7 +274,7 @@ class VLLMOpenAIDeployment:
     max_ongoing_requests) reaches this class without an image rebuild.
     """
 
-    def __init__(self, vllm_cli_args: Dict[str, Any]):
+    def __init__(self, vllm_cli_args: dict[str, Any]):
         # Mirror Ray Serve LLM's model_source → local-path rewrite so
         # `vllmArgs.model_source: gs://...` in values.yaml works without
         # the Ray Serve LLM helper. Runs once per replica (in this
@@ -465,7 +409,7 @@ class VLLMOpenAIDeployment:
         return await _asgi_passthrough(self._vllm_app, request)
 
 
-def build_app_fn(cli_args: Dict[str, Any]) -> serve.Application:
+def build_app_fn(cli_args: dict[str, Any]) -> serve.Application:
     """Entry point referenced by serveConfigV2 import_path.
 
     Runs on the Ray Serve controller (head pod). Returns a serve
