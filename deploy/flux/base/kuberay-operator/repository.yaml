@@ -1,0 +1,9 @@
+# Upstream KubeRay Helm chart repository.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: kuberay
+  namespace: open-serve
+spec:
+  interval: 1h
+  url: https://ray-project.github.io/kuberay-helm/

@@ -1,0 +1,19 @@
+{{- if .Values.statusPage.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-serve-status
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-status
+    app.kubernetes.io/component: status
+spec:
+  type: ClusterIP
+  selector:
+    app: open-serve-status
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+{{- end }}

@@ -1,0 +1,17 @@
+{{- if .Values.statusPage.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: open-serve-status
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-status
+    app.kubernetes.io/component: status
+spec:
+  # With replicas: 2, keep at least one alive during voluntary disruptions
+  # so the public status page stays reachable while the cluster shuffles.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: open-serve-status
+{{- end }}

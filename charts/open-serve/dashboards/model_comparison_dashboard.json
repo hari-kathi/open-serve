@@ -1,0 +1,694 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 1,
+    "links": [],
+    "panels": [
+        {
+            "title": "Latency",
+            "type": "row",
+            "gridPos": {
+                "x": 0,
+                "y": 0,
+                "w": 24,
+                "h": 1
+            },
+            "id": 100,
+            "collapsed": false
+        },
+        {
+            "title": "P95 Time to First Token (TTFT)",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 0,
+                "y": 1,
+                "w": 8,
+                "h": 8
+            },
+            "id": 1,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(ray_vllm_time_to_first_token_seconds_bucket{model_name=~\"$model\"}[5m])) by (le, model_name))",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "P95 Time per Output Token (TPOT)",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 8,
+                "y": 1,
+                "w": 8,
+                "h": 8
+            },
+            "id": 2,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(ray_vllm_request_time_per_output_token_seconds_bucket{model_name=~\"$model\"}[5m])) by (le, model_name))",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "P95 End-to-End Latency",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 16,
+                "y": 1,
+                "w": 8,
+                "h": 8
+            },
+            "id": 3,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(ray_vllm_e2e_request_latency_seconds_bucket{model_name=~\"$model\"}[5m])) by (le, model_name))",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Throughput",
+            "type": "row",
+            "gridPos": {
+                "x": 0,
+                "y": 9,
+                "w": 24,
+                "h": 1
+            },
+            "id": 101,
+            "collapsed": false
+        },
+        {
+            "title": "Generation Tokens/sec",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 0,
+                "y": 10,
+                "w": 8,
+                "h": 8
+            },
+            "id": 4,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "tok/s",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(ray_vllm_generation_tokens_total{model_name=~\"$model\"}[5m])) by (model_name)",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Prompt Tokens/sec",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 8,
+                "y": 10,
+                "w": 8,
+                "h": 8
+            },
+            "id": 5,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "tok/s",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(ray_vllm_prompt_tokens_total{model_name=~\"$model\"}[5m])) by (model_name)",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Requests/sec",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 16,
+                "y": 10,
+                "w": 8,
+                "h": 8
+            },
+            "id": 6,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "reqps",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(ray_vllm_request_success_total{model_name=~\"$model\"}[5m])) by (model_name)",
+                    "legendFormat": "{{model_name}} success",
+                    "refId": "A"
+                },
+                {
+                    "expr": "sum(rate(ray_serve_deployment_request_counter_total{deployment=~\".*\"}[5m])) by (deployment)",
+                    "legendFormat": "{{deployment}} total",
+                    "refId": "B"
+                }
+            ]
+        },
+        {
+            "title": "Cache & Efficiency",
+            "type": "row",
+            "gridPos": {
+                "x": 0,
+                "y": 18,
+                "w": 24,
+                "h": 1
+            },
+            "id": 102,
+            "collapsed": false
+        },
+        {
+            "title": "Prefix Cache Hit Rate",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 0,
+                "y": 19,
+                "w": 12,
+                "h": 8
+            },
+            "id": 7,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1,
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(ray_vllm_prefix_cache_hits_total{model_name=~\"$model\"}[5m])) by (model_name) / clamp_min(sum(rate(ray_vllm_prefix_cache_queries_total{model_name=~\"$model\"}[5m])) by (model_name), 1)",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Request Queue Time P95",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 12,
+                "y": 19,
+                "w": 12,
+                "h": 8
+            },
+            "id": 8,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "s",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "table",
+                    "placement": "bottom",
+                    "calcs": [
+                        "lastNotNull",
+                        "mean",
+                        "max"
+                    ]
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(ray_vllm_request_queue_time_seconds_bucket{model_name=~\"$model\"}[5m])) by (le, model_name))",
+                    "legendFormat": "{{model_name}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Resources & Availability",
+            "type": "row",
+            "gridPos": {
+                "x": 0,
+                "y": 27,
+                "w": 24,
+                "h": 1
+            },
+            "id": 103,
+            "collapsed": false
+        },
+        {
+            "title": "Healthy Replicas",
+            "type": "stat",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 0,
+                "y": 28,
+                "w": 6,
+                "h": 6
+            },
+            "id": 9,
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 0
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ]
+                },
+                "colorMode": "background",
+                "textMode": "value_and_name"
+            },
+            "targets": [
+                {
+                    "expr": "ray_serve_deployment_replica_healthy",
+                    "legendFormat": "{{deployment}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "Queued Queries",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 6,
+                "y": 28,
+                "w": 6,
+                "h": 6
+            },
+            "id": 10,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "ray_serve_deployment_queued_queries",
+                    "legendFormat": "{{deployment}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "GPU Utilization %",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 12,
+                "y": 28,
+                "w": 6,
+                "h": 6
+            },
+            "id": 11,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent",
+                    "min": 0,
+                    "max": 100,
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "showPoints": "never"
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "ray_node_gpus_utilization",
+                    "legendFormat": "GPU {{instance}}",
+                    "refId": "A"
+                }
+            ]
+        },
+        {
+            "title": "GPU Memory Usage %",
+            "type": "timeseries",
+            "datasource": "${datasource}",
+            "gridPos": {
+                "x": 18,
+                "y": 28,
+                "w": 6,
+                "h": 6
+            },
+            "id": 12,
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percentunit",
+                    "min": 0,
+                    "max": 1,
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 10,
+                        "showPoints": "never"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 0.9
+                            },
+                            {
+                                "color": "red",
+                                "value": 0.95
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "multi"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "ray_node_gram_used / (ray_node_gram_used + ray_node_gram_available)",
+                    "legendFormat": "{{instance}}",
+                    "refId": "A"
+                }
+            ]
+        }
+    ],
+    "templating": {
+        "list": [
+            {
+                "name": "datasource",
+                "type": "datasource",
+                "query": "prometheus",
+                "current": {},
+                "hide": 0
+            },
+            {
+                "name": "model",
+                "type": "query",
+                "datasource": "${datasource}",
+                "query": "label_values(ray_vllm_request_success_total, model_name)",
+                "includeAll": true,
+                "allValue": ".*",
+                "current": {
+                    "text": "All",
+                    "value": "$__all"
+                },
+                "multi": true,
+                "hide": 0,
+                "refresh": 2,
+                "sort": 1,
+                "label": "Model"
+            }
+        ]
+    },
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Ray Serve - Model Comparison",
+    "uid": "ray-serve-model-comparison",
+    "version": 1
+}

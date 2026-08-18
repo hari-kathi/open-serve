@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/prometheus-operator-crds
+# No environment-specific values — pin/override the chart version here with a
+# patch on the HelmRelease if this environment needs to diverge from base.

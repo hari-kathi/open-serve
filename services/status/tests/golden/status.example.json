@@ -1,0 +1,379 @@
+{
+  "rendered_at": 1779900000.0,
+  "data_stale_s": 0.0,
+  "banner": {
+    "state": "healthy",
+    "color": "#22c55e",
+    "fallback_mode": false
+  },
+  "components": {
+    "Model": [
+      {
+        "model_id": "qwen3-8b",
+        "category": "Model",
+        "description": "",
+        "state": "healthy",
+        "color": "#22c55e",
+        "uptime_fraction": 1.0,
+        "endpoints": [
+          {
+            "endpoint": "external",
+            "state": "healthy",
+            "color": "#22c55e",
+            "success_rate_5m": 1.0,
+            "p95_latency_s": 2.5,
+            "slo_latency_s": 5.0,
+            "hourly_strip": [
+              {
+                "hour": "2026-05-27T11:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T12:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T13:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T14:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T15:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T16:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              }
+            ]
+          },
+          {
+            "endpoint": "internal",
+            "state": "healthy",
+            "color": "#22c55e",
+            "success_rate_5m": 1.0,
+            "p95_latency_s": 2.5,
+            "slo_latency_s": 5.0,
+            "hourly_strip": [
+              {
+                "hour": "2026-05-27T11:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T12:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T13:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T14:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T15:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T16:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              }
+            ]
+          }
+        ],
+        "hourly_strip": [
+          {
+            "hour": "2026-05-27T11:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T12:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T13:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T14:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T15:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T16:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          }
+        ]
+      }
+    ],
+    "Embedding": [
+      {
+        "model_id": "mxbai",
+        "category": "Embedding",
+        "description": "",
+        "state": "healthy",
+        "color": "#22c55e",
+        "uptime_fraction": 1.0,
+        "endpoints": [
+          {
+            "endpoint": "external",
+            "state": "healthy",
+            "color": "#22c55e",
+            "success_rate_5m": 1.0,
+            "p95_latency_s": 0.4,
+            "slo_latency_s": 1.0,
+            "hourly_strip": [
+              {
+                "hour": "2026-05-27T11:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T12:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T13:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T14:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T15:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T16:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              }
+            ]
+          },
+          {
+            "endpoint": "internal",
+            "state": "healthy",
+            "color": "#22c55e",
+            "success_rate_5m": 1.0,
+            "p95_latency_s": 0.4,
+            "slo_latency_s": 1.0,
+            "hourly_strip": [
+              {
+                "hour": "2026-05-27T11:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T12:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T13:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T14:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T15:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              },
+              {
+                "hour": "2026-05-27T16:00Z",
+                "date": "2026-05-27",
+                "state": "healthy",
+                "color": "#22c55e",
+                "uptime_fraction": 1.0,
+                "detail": null
+              }
+            ]
+          }
+        ],
+        "hourly_strip": [
+          {
+            "hour": "2026-05-27T11:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T12:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T13:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T14:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T15:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          },
+          {
+            "hour": "2026-05-27T16:00Z",
+            "date": "2026-05-27",
+            "state": "healthy",
+            "color": "#22c55e",
+            "uptime_fraction": 1.0,
+            "detail": null
+          }
+        ]
+      }
+    ]
+  },
+  "active_incidents": [],
+  "recent_history": [],
+  "strip_days": 14,
+  "strip_hours": 336,
+  "strip_granularity": "hour",
+  "recent_history_days": 30,
+  "branding": {
+    "title": "open-serve Status",
+    "logo_url": "",
+    "footer_link_text": "",
+    "footer_link_url": ""
+  }
+}

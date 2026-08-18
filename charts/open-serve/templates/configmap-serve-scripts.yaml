@@ -1,0 +1,47 @@
+{{/*
+  Per-model serve script ConfigMaps — one per enabled serveModels entry.
+  - serveScript / serveScriptFile inject a Python module (mounted at
+    /app/serve-scripts, on PYTHONPATH). Required for type: ray-serve-llm,
+    where the script builds an LLMConfig + build_openai_app application.
+  - type: vllm-raw models get a placeholder ConfigMap (the serve module is
+    baked into the open-serve-vllm image).
+  - type: custom models without an injected script also get a placeholder
+    (they provide their own importPath but still need a ConfigMap for the
+    volume mount).
+*/}}
+{{- if .Values.serveModels }}
+{{- range $name, $model := .Values.serveModels }}
+{{- if $model.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: serve-{{ $name }}-script
+  labels:
+    {{- include "open-serve.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+data:
+  {{- if $model.serveScript }}
+  {{ $model.serveScriptFilename | default (printf "serve_%s.py" ($name | replace "-" "_")) }}: |
+    {{- $model.serveScript | nindent 4 }}
+  {{- else if $model.serveScriptFile }}
+  {{ $model.serveScriptFilename | default (printf "serve_%s.py" ($name | replace "-" "_")) }}: |-
+{{ $.Files.Get $model.serveScriptFile | nindent 4 }}
+  {{- else if eq ($model.type | default "custom") "vllm-raw" }}
+  placeholder.txt: |
+    # vllm-raw model — serve module baked into the open-serve-vllm image
+    # at /home/ray/vllm_serve_app.py (on PYTHONPATH). Args are provided via
+    # serveConfigV2.applications[].args in rayservice.yaml.
+  {{- else if eq ($model.type | default "custom") "ray-serve-llm" }}
+  placeholder.txt: |
+    # ray-serve-llm model — provide serveScript or serveScriptFile in values
+    # to inject the LLMConfig + build_openai_app script expected at
+    # import_path serve_{{ $name | replace "-" "_" }}:app.
+  {{- else }}
+  placeholder.txt: |
+    # Custom model — serve script provided via importPath: {{ $model.importPath }}
+    # Add serveScript or serveScriptFile in values to inject a Python script here.
+  {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

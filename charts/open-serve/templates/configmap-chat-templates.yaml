@@ -1,0 +1,22 @@
+{{/*
+  Chat template ConfigMaps for vLLM tool/function calling.
+  Creates one ConfigMap per serveModels entry that sets `chatTemplate:`.
+  Templates are loaded from the chart's files/ directory.
+*/}}
+{{- if .Values.serveModels }}
+{{- range $name, $model := .Values.serveModels }}
+{{- if and $model.enabled $model.chatTemplate }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chat-template-{{ $name }}
+  labels:
+    {{- include "open-serve.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+data:
+  {{ $model.chatTemplate }}: |
+{{ $.Files.Get (printf "files/%s" $model.chatTemplate) | indent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}

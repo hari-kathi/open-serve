@@ -1,0 +1,364 @@
+{{/*
+  Per-model RayService — creates one RayService per enabled entry in
+  serveModels. Every model (LLM or not) gets an independent RayService with
+  its own head and worker group.
+*/}}
+{{- $models := dict }}
+{{- if .Values.serveModels }}
+{{- range $name, $model := .Values.serveModels }}
+{{- if $model.enabled }}
+{{- $_ := set $models $name $model }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $name, $model := $models }}
+{{- $serveMin := $model.replicas.min | default 0 }}
+{{- $serveMax := $model.replicas.max | default 3 }}
+{{- $workerMin := $model.replicas.workerMin | default $serveMin }}
+{{- $workerMax := $model.replicas.workerMax | default $serveMax }}
+{{- $workerGpusRay := 0 }}
+{{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
+{{- if hasKey $model.gpu "workerGpus" }}
+{{- $workerGpusRay = int ($model.gpu.workerGpus | float64) }}
+{{- else }}
+{{- $workerGpusRay = int (ceil ($model.gpu.count | float64)) }}
+{{- end }}
+{{- end }}
+---
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: rayservice-{{ $name }}
+  labels:
+    {{- include "open-serve.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+    open-serve.io/tier: {{ $model.tier | default "internal-test" }}
+spec:
+  serviceUnhealthySecondThreshold: 900
+  deploymentUnhealthySecondThreshold: 300
+  serveConfigV2: |
+    applications:
+    - name: {{ $name }}-serve
+      route_prefix: {{ $model.routePrefix | default "/" }}
+      {{- if eq ($model.type | default "custom") "ray-serve-llm" }}
+      import_path: serve_{{ $name | replace "-" "_" }}:app
+      {{- else if eq $model.type "vllm-raw" }}
+      # Plain Ray Serve + vLLM. The vllm_serve_app module is baked into the
+      # open-serve-vllm image at /home/ray (on PYTHONPATH) and mounts vLLM's
+      # full OpenAI FastAPI app via @serve.ingress — exposes /v1/responses,
+      # /v1/score, /v1/rerank, /tokenize, /pooling, /classify, audio
+      # transcriptions, etc. (every route vLLM registers), not just the
+      # chat/completions/embeddings subset that ray.serve.llm proxies.
+      #
+      # `args:` forwards through _parse_vllm_args → vLLM's own argparse, so
+      # any vLLM CLI flag can be set here as snake_case keys (model, dtype,
+      # max_model_len, tensor_parallel_size, kv_cache_dtype, reasoning_parser,
+      # tool_call_parser, chat_template, limit_mm_per_prompt, etc.).
+      #
+      # `deployments:` overrides the @serve.deployment(name="VLLMOpenAI",
+      # ...) decorator defaults in vllm_serve_app.py — every per-model knob
+      # (num_gpus, replica bounds, target_ongoing_requests) routes through
+      # here without an image rebuild.
+      import_path: vllm_serve_app:build_app_fn
+      args:
+        {{- toYaml $model.vllmArgs | nindent 8 }}
+      deployments:
+      - name: VLLMOpenAI
+        autoscaling_config:
+          min_replicas: {{ $serveMin }}
+          max_replicas: {{ $serveMax }}
+          target_ongoing_requests: {{ $model.autoscaling.targetOngoingRequests | default 5 }}
+          downscale_delay_s: {{ $model.autoscaling.downscaleDelayS | default 600 }}
+          upscale_delay_s: {{ $model.autoscaling.upscaleDelayS | default 30 }}
+        {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
+        ray_actor_options:
+          num_gpus: {{ $model.gpu.count }}
+        {{- end }}
+      {{- else }}
+      import_path: {{ $model.importPath }}
+      deployments:
+      - name: {{ $name }}-model
+        autoscaling_config:
+          min_replicas: {{ $serveMin }}
+          max_replicas: {{ $serveMax }}
+          target_ongoing_requests: {{ $model.autoscaling.targetOngoingRequests | default 5 }}
+          downscale_delay_s: {{ $model.autoscaling.downscaleDelayS | default 600 }}
+          upscale_delay_s: {{ $model.autoscaling.upscaleDelayS | default 30 }}
+        {{- if $model.gpu }}
+        {{- if gt ($model.gpu.count | default 0 | float64) 0.0 }}
+        ray_actor_options:
+          num_gpus: {{ $model.gpu.count }}
+        {{- end }}
+        {{- end }}
+        {{- if $model.userConfig }}
+        user_config:
+          {{- toYaml $model.userConfig | nindent 10 }}
+        {{- end }}
+        {{- if $model.modelWeightsGcsUri }}
+        runtime_env:
+          pip:
+            - google-cloud-storage>=2.18.0
+        {{- end }}
+      {{- end }}
+  rayClusterConfig:
+    rayVersion: '{{ $model.rayVersion | default "2.53.0" }}'
+    enableInTreeAutoscaling: true
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: '0.0.0.0'
+        num-cpus: '0'
+        resources: '"{\"head_node\": 1}"'
+      template:
+        metadata:
+          {{- if or $.Values.rayClusterChecksum.enabled $model.podAnnotations }}
+          # Forces a KubeRay zero-downtime cluster swap when ANY field of
+          # this serveModels entry changes. Hashing only $model.replicas
+          # would let serveScript-only edits (autoscaling parameters,
+          # engine kwargs, model source, etc.) propagate to the ConfigMap
+          # while Ray Serve's running controller never re-imports them —
+          # the change appears successful but is a silent no-op. Hashing
+          # $model | toYaml catches every per-model field. Per-model scope:
+          # only the model whose $model changed rolls; other models'
+          # RayServices are unaffected.
+          annotations:
+            {{- if $.Values.rayClusterChecksum.enabled }}
+            checksum/worker-config: {{ $model | toYaml | sha256sum }}
+            {{- end }}
+            {{- with $model.podAnnotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          labels:
+            model: {{ $name }}
+            open-serve.io/tier: {{ $model.tier | default "internal-test" }}
+        spec:
+          serviceAccountName: {{ $.Values.serviceAccount.name | default "open-serve-worker" }}
+          containers:
+            - name: ray-head
+              image: {{ include "open-serve.modelImage" (dict "model" $model "global" $) }}
+              imagePullPolicy: IfNotPresent
+              ports:
+                - containerPort: 6379
+                  name: gcs-server
+                - containerPort: 8265
+                  name: dashboard
+                - containerPort: 10001
+                  name: client
+                - containerPort: 8000
+                  name: serve
+                - containerPort: 8080
+                  name: metrics
+              env:
+                - name: PYTHONPATH
+                  value: "/app/serve-scripts"
+              {{- if eq ($model.type | default "custom") "custom" }}
+                - name: RAY_SERVE_DEPLOYMENT_NAME
+                  value: "{{ $name }}-model"
+              {{- end }}
+              {{- if $model.env }}
+                {{- toYaml $model.env | nindent 16 }}
+              {{- end }}
+              {{- if $model.modelWeightsGcsUri }}
+                - name: DM_MODEL_GCS_URI
+                  value: {{ $model.modelWeightsGcsUri | quote }}
+              {{- end }}
+              {{- if $model.grafana }}
+                - name: RAY_GRAFANA_IFRAME_HOST
+                  value: {{ $model.grafana.iframeHost | quote }}
+                - name: RAY_GRAFANA_HOST
+                  value: {{ $model.grafana.host | quote }}
+                - name: RAY_PROMETHEUS_HOST
+                  value: {{ $model.grafana.prometheusHost | quote }}
+              {{- end }}
+              resources:
+                requests:
+                  cpu: {{ (($model.resources).head).requests.cpu | default "2" | quote }}
+                  memory: {{ (($model.resources).head).requests.memory | default "8Gi" | quote }}
+                limits:
+                  cpu: {{ (($model.resources).head).limits.cpu | default "3" | quote }}
+                  memory: {{ (($model.resources).head).limits.memory | default "12Gi" | quote }}
+              volumeMounts:
+                - name: serve-scripts
+                  mountPath: /app/serve-scripts
+                {{- if $model.chatTemplate }}
+                - name: chat-templates
+                  mountPath: /templates
+                {{- end }}
+                {{- if $model.extraVolumeMounts }}
+                {{- toYaml $model.extraVolumeMounts | nindent 16 }}
+                {{- end }}
+          volumes:
+            - name: serve-scripts
+              configMap:
+                name: serve-{{ $name }}-script
+            {{- if $model.chatTemplate }}
+            - name: chat-templates
+              configMap:
+                name: chat-template-{{ $name }}
+            {{- end }}
+            {{- if $model.extraVolumes }}
+            {{- toYaml $model.extraVolumes | nindent 12 }}
+            {{- end }}
+    workerGroupSpecs:
+      - groupName: {{ $name }}-workers
+        replicas: {{ $workerMin }}
+        minReplicas: {{ $workerMin }}
+        maxReplicas: {{ $workerMax }}
+        rayStartParams:
+          {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
+          num-gpus: {{ $workerGpusRay | quote }}
+          {{- if $model.gpu.acceleratorType }}
+          resources: '"{\"accelerator_type:{{ $model.gpu.acceleratorType }}\": 9999}"'
+          {{- end }}
+          {{- end }}
+        template:
+          metadata:
+            {{- if or $.Values.rayClusterChecksum.enabled $model.podAnnotations }}
+            # See the head template annotation above for context. Hashing
+            # the full $model so the worker pod template gets a new hash
+            # whenever any model field changes — keeps head + worker pod
+            # hashes in sync for KubeRay's swap mechanism.
+            annotations:
+              {{- if $.Values.rayClusterChecksum.enabled }}
+              checksum/worker-config: {{ $model | toYaml | sha256sum }}
+              {{- end }}
+              {{- with $model.podAnnotations }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+            {{- end }}
+            labels:
+              model: {{ $name }}
+              open-serve.io/tier: {{ $model.tier | default "internal-test" }}
+          spec:
+            serviceAccountName: {{ $.Values.serviceAccount.name | default "open-serve-worker" }}
+            {{- if and $model.gpu $model.gpu.nodeSelector }}
+            nodeSelector:
+              {{- toYaml $model.gpu.nodeSelector | nindent 14 }}
+            {{- end }}
+            {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            {{- end }}
+            containers:
+              - name: ray-worker
+                image: {{ include "open-serve.modelImage" (dict "model" $model "global" $) }}
+                imagePullPolicy: IfNotPresent
+                ports:
+                  - containerPort: 8080
+                    name: metrics
+                env:
+                  - name: PYTHONPATH
+                    value: "/app/serve-scripts"
+                {{- if eq ($model.type | default "custom") "custom" }}
+                  - name: RAY_SERVE_DEPLOYMENT_NAME
+                    value: "{{ $name }}-model"
+                {{- end }}
+                {{- if $model.env }}
+                  {{- toYaml $model.env | nindent 18 }}
+                {{- end }}
+                {{- if $model.modelWeightsGcsUri }}
+                  - name: DM_MODEL_GCS_URI
+                    value: {{ $model.modelWeightsGcsUri | quote }}
+                {{- end }}
+                {{- if $.Values.workerReadinessProbe.enabled }}
+                # Replaces KubeRay's default readiness probe (which hits the
+                # Serve HTTP proxy and goes green before model weights load).
+                # Polls the Ray dashboard for the per-replica state of THIS
+                # pod (matched via HOSTNAME → node_instance_id). Exits 0 only
+                # when this pod hosts a replica in RUNNING state.
+                #
+                # Per-replica gating (vs. deployment-level status) matters
+                # for scale-out: during 1→2 the deployment status flips to
+                # UPSCALING, but pod 1's replica is still RUNNING and should
+                # stay Ready while pod 2's loading replica stays NotReady.
+                # Fails closed: dashboard unreachable → not ready.
+                readinessProbe:
+                  exec:
+                    command:
+                      - python3
+                      - -c
+                      - |
+                        import json, os, sys, urllib.request
+                        try:
+                            r = urllib.request.urlopen(f"http://{os.environ['RAY_IP']}:8265/api/serve/applications/", timeout=4)
+                            d = json.load(r)
+                        except Exception:
+                            sys.exit(1)
+                        hostname = os.environ.get("HOSTNAME", "")
+                        if not hostname:
+                            sys.exit(1)
+                        for app in d.get("applications", {}).values():
+                            if not isinstance(app, dict):
+                                continue
+                            for name, dep in app.get("deployments", {}).items():
+                                if not isinstance(dep, dict):
+                                    continue
+                                # Deployment name conventions in this chart:
+                                #   - "LLMServer:*" → ray.serve.llm.build_openai_app (type:ray-serve-llm)
+                                #   - "*-model"     → per-model "$name-model" (type:custom)
+                                #   - "VLLMOpenAI"  → vllm_serve_app's @serve.deployment (type:vllm-raw)
+                                if not (
+                                    name.startswith("LLMServer:")
+                                    or name.endswith("-model")
+                                    or name == "VLLMOpenAI"
+                                ):
+                                    continue
+                                for replica in dep.get("replicas", []):
+                                    if not isinstance(replica, dict):
+                                        continue
+                                    if replica.get("node_instance_id") == hostname and replica.get("state") == "RUNNING":
+                                        sys.exit(0)
+                        sys.exit(1)
+                  initialDelaySeconds: 30
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 60
+                {{- end }}
+                resources:
+                  requests:
+                    cpu: {{ $model.resources.worker.requests.cpu | quote }}
+                    memory: {{ $model.resources.worker.requests.memory | quote }}
+                    {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
+                    nvidia.com/gpu: {{ if hasKey $model.gpu "kubernetesGpu" }}{{ $model.gpu.kubernetesGpu | quote }}{{ else }}{{ $workerGpusRay | quote }}{{ end }}
+                    {{- end }}
+                  limits:
+                    cpu: {{ $model.resources.worker.limits.cpu | quote }}
+                    memory: {{ $model.resources.worker.limits.memory | quote }}
+                    {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
+                    nvidia.com/gpu: {{ if hasKey $model.gpu "kubernetesGpu" }}{{ $model.gpu.kubernetesGpu | quote }}{{ else }}{{ $workerGpusRay | quote }}{{ end }}
+                    {{- end }}
+                volumeMounts:
+                  - name: serve-scripts
+                    mountPath: /app/serve-scripts
+                {{- if $model.chatTemplate }}
+                  - name: chat-templates
+                    mountPath: /templates
+                {{- end }}
+                {{- if $model.sharedMemorySize }}
+                  - name: dshm
+                    mountPath: /dev/shm
+                {{- end }}
+                {{- if $model.extraVolumeMounts }}
+                {{- toYaml $model.extraVolumeMounts | nindent 18 }}
+                {{- end }}
+            volumes:
+              - name: serve-scripts
+                configMap:
+                  name: serve-{{ $name }}-script
+              {{- if $model.chatTemplate }}
+              - name: chat-templates
+                configMap:
+                  name: chat-template-{{ $name }}
+              {{- end }}
+              {{- if $model.sharedMemorySize }}
+              - name: dshm
+                emptyDir:
+                  medium: Memory
+                  sizeLimit: {{ $model.sharedMemorySize }}
+              {{- end }}
+              {{- if $model.extraVolumes }}
+              {{- toYaml $model.extraVolumes | nindent 14 }}
+              {{- end }}
+{{- end }}

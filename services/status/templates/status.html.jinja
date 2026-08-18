@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ snap.branding.title }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      {% if snap.branding.logo_url %}
+        <img class="logo" src="{{ snap.branding.logo_url }}" alt="logo">
+      {% endif %}
+      <h1>{{ snap.branding.title }}</h1>
+    </div>
+  </header>
+
+  <main>
+    <section class="banner banner-{{ snap.banner_state.label }}" data-test-banner="{{ snap.banner_state.label }}">
+      <div class="banner-dot" style="background:{{ snap.banner_state.color }};"></div>
+      <div class="banner-text">
+        {% if snap.fallback_mode %}
+          <h2>Status temporarily unavailable</h2>
+          <p>The monitoring backend is unreachable — model state cannot be determined right now. The page will recover automatically once monitoring is restored.</p>
+        {% elif snap.banner_state.label == "healthy" %}
+          <h2>All models operational</h2>
+          <p>Every production model is responding within its SLO.</p>
+        {% elif snap.banner_state.label == "degraded" %}
+          <h2>Some models are experiencing degraded performance</h2>
+          <p>One or more production models are responding slowly or with intermittent failures. See per-model details below.</p>
+        {% elif snap.banner_state.label == "down" %}
+          <h2>One or more models are down</h2>
+          <p>One or more production models are unreachable. See per-model details below.</p>
+        {% else %}
+          <h2>Status unknown</h2>
+        {% endif %}
+        <p class="last-updated">
+          Last updated <span class="js-localtime" data-ts="{{ snap.rendered_at }}">{{ snap.rendered_at | iso }}</span>
+          {% if snap.data_stale_s and snap.data_stale_s > 60 %}
+            <span class="stale-tag">(serving cached data, {{ snap.data_stale_s | duration }} old)</span>
+          {% endif %}
+        </p>
+      </div>
+    </section>
+
+    {% if snap.active_incidents %}
+      <section class="incidents-active">
+        <h3>Active incidents</h3>
+        {% for inc in snap.active_incidents %}
+          <article class="incident incident-{{ inc.peak_state.label }}" data-test-incident="{{ inc.model_id }}">
+            <div class="incident-dot" style="background:{{ inc.peak_state.color }};"></div>
+            <div class="incident-body">
+              <h4>{{ inc.peak_state.label | capitalize }} — {{ inc.model_id }} ({{ inc.endpoint }})</h4>
+              <p>
+                Started <span class="js-localtime" data-ts="{{ inc.start_ts }}">{{ inc.start_ts | iso }}</span> · ongoing for {{ inc.duration_s | duration }}
+                {% if inc.error_type %}· error: <code>{{ inc.error_type }}</code>{% endif %}
+              </p>
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {% if snap.models_by_category %}
+      <section class="system-status">
+        <div class="system-status-head">
+          <h3>System Status</h3>
+          <div class="strip-pager" id="strip-pager" hidden>
+            <button type="button" class="pager-btn" id="pager-older" aria-label="Show the previous two days">&lsaquo;</button>
+            <span class="pager-range" id="pager-range" aria-live="polite"></span>
+            <button type="button" class="pager-btn" id="pager-newer" aria-label="Show the next two days">&rsaquo;</button>
+          </div>
+        </div>
+        {% for category, models in snap.models_by_category.items() %}
+          <div class="component-group" data-test-category="{{ category }}">
+            <h4>{{ category }}</h4>
+            {% for m in models %}
+              <details class="model-card" data-test-model="{{ m.model_id }}" data-test-state="{{ m.state.label }}">
+                <summary class="model-summary">
+                  <span class="model-dot" style="background:{{ m.state.color }};" title="{{ m.state.label }}"></span>
+                  <span class="model-name">
+                    <strong>{{ m.model_id }}</strong>
+                    <span class="model-uptime-inline">· {{ m.uptime_fraction | uptime }} ({{ strip_days }}d)</span>
+                    {% if m.description %}<span class="model-desc">{{ m.description }}</span>{% endif %}
+                  </span>
+                  <span class="strip" data-test-strip="model" title="Hourly uptime · 2 days shown · use ‹ › above to page through the last {{ strip_days }} days">
+                    {% for cell in m.hourly_strip %}
+                      <span class="bar bar-{{ cell.state.label }}{% if cell.is_day_start and not loop.first %} bar-day-start{% endif %}"
+                            style="background:{{ cell.state.color }};"
+                            data-bar-hour="{{ cell.iso_hour | hour_label }}"
+                            data-bar-hour-iso="{{ cell.iso_hour }}"
+                            data-bar-date="{{ cell.iso_date }}"
+                            data-bar-state="{{ cell.state.label }}"
+                            {% if cell.detail %}data-bar-detail="{{ cell.detail }}"{% endif %}
+                            data-bar-uptime="{% if cell.uptime_fraction is not none %}{{ cell.uptime_fraction | uptime }}{% else %}no data{% endif %}"></span>
+                    {% endfor %}
+                  </span>
+                  <span class="model-state state-{{ m.state.label }}">{{ m.state.label }}</span>
+                  <span class="expand-arrow" aria-hidden="true">▾</span>
+                </summary>
+                <div class="endpoints">
+                  {% for ep in m.endpoints %}
+                    <div class="endpoint-row" data-test-endpoint="{{ ep.endpoint }}" data-test-endpoint-state="{{ ep.state.label }}">
+                      <span class="endpoint-label">
+                        <span class="endpoint-dot" style="background:{{ ep.state.color }};"></span>
+                        {{ ep.endpoint }}
+                      </span>
+                      <span class="strip">
+                        {% for cell in ep.hourly_strip %}
+                          <span class="bar bar-{{ cell.state.label }}{% if cell.is_day_start and not loop.first %} bar-day-start{% endif %}"
+                                style="background:{{ cell.state.color }};"
+                                data-bar-hour="{{ cell.iso_hour | hour_label }}"
+                                data-bar-hour-iso="{{ cell.iso_hour }}"
+                                data-bar-date="{{ cell.iso_date }}"
+                                data-bar-state="{{ cell.state.label }}"
+                                data-bar-endpoint="{{ ep.endpoint }}"
+                                {% if cell.detail %}data-bar-detail="{{ cell.detail }}"{% endif %}
+                                data-bar-uptime="{% if cell.uptime_fraction is not none %}{{ cell.uptime_fraction | uptime }}{% else %}no data{% endif %}"></span>
+                        {% endfor %}
+                      </span>
+                      <span class="endpoint-latency">
+                        p95 {{ ep.p95_latency_s | latency }} <span class="metric-slo">(10m) / {{ ep.slo_latency_s | latency }} SLO</span>
+                      </span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </details>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </section>
+    {% else %}
+      <section class="component-group empty">
+        <p>No models configured yet.</p>
+      </section>
+    {% endif %}
+
+    <details class="recent-history">
+      <summary class="recent-history-summary">
+        <span>Recent history (past {{ recent_history_days }} days)</span>
+        {% set total_incidents = snap.recent_history | sum(attribute='incidents', start=[]) | length %}
+        <span class="incident-count">{{ total_incidents }} incident{% if total_incidents != 1 %}s{% endif %}</span>
+        <span class="expand-arrow" aria-hidden="true">▾</span>
+      </summary>
+      <div class="recent-history-body">
+        {% for day in snap.recent_history %}
+          <article class="day-card{% if day.incidents %} day-card-has-incidents{% endif %}">
+            <h4>{{ day.iso_date | pretty_date }}</h4>
+            {% if day.incidents %}
+              <ul class="day-incidents">
+                {% for inc in day.incidents %}
+                  <li>
+                    <span class="incident-dot inline" style="background:{{ inc.peak_state.color }};"></span>
+                    <strong>{{ inc.peak_state.label | capitalize }}</strong> — {{ inc.model_id }} ({{ inc.endpoint }})
+                    · {{ inc.duration_s | duration }}
+                    {% if inc.error_type %}· <code>{{ inc.error_type }}</code>{% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="no-incidents">No incidents reported.</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </details>
+  </main>
+
+  <footer class="footer">
+    <a href="/status.json">JSON</a>
+    {% if snap.branding.footer_link_url %}
+      · <a href="{{ snap.branding.footer_link_url }}">{{ snap.branding.footer_link_text }}</a>
+    {% endif %}
+  </footer>
+
+  <div id="bar-tooltip" class="bar-tooltip" hidden></div>
+  <script src="/static/tooltip.js" defer></script>
+</body>
+</html>

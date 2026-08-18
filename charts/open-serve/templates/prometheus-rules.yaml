@@ -1,0 +1,311 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ray-serve-alerts
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+spec:
+  groups:
+    # =====================================================================
+    # Generic Ray Serve alerts — apply to ALL model types (LLM, CNN, etc.)
+    # =====================================================================
+
+    - name: ray-serve-latency
+      interval: 30s
+      rules:
+        # `by` retains deployment + model + ray_io_cluster + namespace so the
+        # alert label set lets oncall map symptom → cluster → model.
+        - alert: RayServeHighLatency
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(ray_serve_deployment_processing_latency_ms_bucket[5m])) by (le, deployment, model, ray_io_cluster, namespace)
+            ) > {{ .Values.monitoring.alerts.latency.rayServeP95Ms | default 10000 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High P95 latency on {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "P95 processing latency is {{`{{ $value | humanize }}`}}ms on deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, namespace={{`{{ $labels.namespace }}`}}, threshold: {{ .Values.monitoring.alerts.latency.rayServeP95Ms | default 10000 }}ms)"
+
+    - name: ray-serve-availability
+      interval: 30s
+      rules:
+        # Customer-facing symptom — gated on tier="production". Internal-test
+        # models scale to zero by design; zero replicas is the expected steady
+        # state, not an alert condition.
+        - alert: RayServeNoReplicas
+          expr: ray_serve_deployment_replica_healthy{tier="production"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "No healthy replicas for {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "Deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}) has zero healthy replicas for more than 2 minutes"
+        - alert: RayServeNoReplicasCritical
+          expr: ray_serve_deployment_replica_healthy{tier="production"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No healthy replicas for {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}}, extended)"
+            description: "Deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}) has had zero healthy replicas for more than 10 minutes"
+        # No tier gate — error rate matters whether a model is customer-facing
+        # or in soak. Routing by tier happens in Alertmanager.
+        - alert: RayServeHighErrorRate
+          expr: >
+            (
+              sum(rate(ray_serve_num_deployment_http_error_requests_total[5m])) by (deployment, model, ray_io_cluster, namespace)
+              /
+              sum(rate(ray_serve_deployment_request_counter_total[5m])) by (deployment, model, ray_io_cluster, namespace)
+            ) > {{ .Values.monitoring.alerts.availability.errorRateThreshold | default 0.05 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate on {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "Error rate is {{`{{ $value | humanizePercentage }}`}} on deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, namespace={{`{{ $labels.namespace }}`}}, threshold: {{ .Values.monitoring.alerts.availability.errorRateThreshold | default 0.05 }})"
+        - alert: RayServeReplicaRestarts
+          expr: >
+            increase(ray_serve_deployment_replica_starts_total[10m]) > {{ .Values.monitoring.alerts.availability.replicaRestartsThreshold | default 3 }}
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Frequent replica restarts for {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "{{`{{ $value }}`}} replica restarts in 10 minutes on deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, threshold: {{ .Values.monitoring.alerts.availability.replicaRestartsThreshold | default 3 }})"
+        # Namespace-scoped variant of KubePodNotReady. The bundled rule has
+        # `for: 15m`, which is longer than KubeRay's pod-deletion backoff for
+        # unschedulable workers. Empirically (verified across multiple test
+        # runs) KubeRay deletes the Pending pod ~5min 10s after creation when
+        # cluster-autoscaler can't satisfy the GPU request (STOCKOUT, quota,
+        # taints). With `for: 5m` the alert transition to firing landed AFTER
+        # pod deletion (the eval cycle adds ~1 min of latency on top of the
+        # for: clock). `for: 3m` gives ~1 min of firing time before the pod
+        # disappears — enough for Alertmanager group_wait (30s) + alert
+        # dispatch.
+        # Scoped to RayCluster-owned worker pods so we don't false-positive
+        # on the probe Deployment or other pods in the open-serve namespace.
+        - alert: OpenServeWorkerPending
+          expr: >
+            (
+              kube_pod_status_phase{namespace="open-serve", phase="Pending"} == 1
+            )
+            * on (namespace, pod) group_left(created_by_name, node)
+              kube_pod_info{namespace="open-serve", created_by_kind="RayCluster"}
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Ray worker pod {{`{{ $labels.pod }}`}} pending for >5m"
+            description: "Worker pod {{`{{ $labels.pod }}`}} (raycluster={{`{{ $labels.created_by_name }}`}}, node={{`{{ $labels.node }}`}}, namespace={{`{{ $labels.namespace }}`}}) has been Pending for more than 5 minutes. Likely cause: cluster-autoscaler can't provision a GPU node — check `kubectl get events` for FailedScaleUp / ZONE_RESOURCE_POOL_EXHAUSTED. KubeRay deletes unschedulable pods after ~14m, so this fires before the standard KubePodNotReady (for: 15m)."
+
+    - name: ray-serve-saturation
+      interval: 30s
+      rules:
+        - alert: RayServeHighQueuedQueries
+          expr: >
+            ray_serve_deployment_queued_queries > {{ .Values.monitoring.alerts.saturation.queuedQueriesThreshold | default 20 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High queued queries for {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "{{`{{ $value }}`}} queries queued on deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, threshold: {{ .Values.monitoring.alerts.saturation.queuedQueriesThreshold | default 20 }})"
+        - alert: RayServeHighQueueDepth
+          expr: >
+            ray_serve_replica_processing_queries > {{ .Values.monitoring.alerts.saturation.queueDepthThreshold | default 10 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High queue depth on {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "{{`{{ $value }}`}} requests actively processing on deployment {{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, pod={{`{{ $labels.pod }}`}}, threshold: {{ .Values.monitoring.alerts.saturation.queueDepthThreshold | default 10 }})"
+
+    # =====================================================================
+    # GPU alerts — apply to any GPU-accelerated model (LLM, CNN, etc.)
+    # Only rendered when GPU models are configured.
+    # =====================================================================
+
+    - name: ray-serve-gpu
+      interval: 30s
+      rules:
+        - alert: GPUMemoryHigh
+          expr: >
+            ray_node_gram_used / (ray_node_gram_used + ray_node_gram_available) > {{ .Values.monitoring.alerts.saturation.gpuMemoryWarning | default 0.95 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GPU memory high on {{`{{ $labels.pod }}`}} ({{`{{ $labels.model }}`}})"
+            description: "GPU memory utilization is {{`{{ $value | humanizePercentage }}`}} on pod {{`{{ $labels.pod }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, instance={{`{{ $labels.instance }}`}}, threshold: {{ .Values.monitoring.alerts.saturation.gpuMemoryWarning | default 0.95 }})"
+        - alert: GPUMemoryCritical
+          expr: >
+            ray_node_gram_used / (ray_node_gram_used + ray_node_gram_available) > {{ .Values.monitoring.alerts.saturation.gpuMemoryCritical | default 0.98 }}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GPU memory critical on {{`{{ $labels.pod }}`}} ({{`{{ $labels.model }}`}})"
+            description: "GPU memory utilization is {{`{{ $value | humanizePercentage }}`}} on pod {{`{{ $labels.pod }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, instance={{`{{ $labels.instance }}`}}, threshold: {{ .Values.monitoring.alerts.saturation.gpuMemoryCritical | default 0.98 }})"
+
+    # =====================================================================
+    # vLLM-specific alerts — only for LLM models using the vLLM engine.
+    # These use ray_vllm_* metrics that don't exist for non-LLM models.
+    # =====================================================================
+
+    {{- if .Values.monitoring.alerts.vllm.enabled | default true }}
+    - name: ray-serve-vllm-latency
+      interval: 30s
+      rules:
+        # vLLM latency alerts — customer-facing symptoms, gated on tier="production".
+        # Cold-start latency on scale-to-zero internal-test models would
+        # otherwise trip these every time a worker comes up.
+        # vLLM histograms carry both `model_name` (vLLM-emitted, e.g.
+        # mixedbread-ai/mxbai-embed-large-v1) and `model` (PodMonitor relabel
+        # from the pod's `model` label, e.g. mxbai-embed-large-v1). Retain
+        # both plus ray_io_cluster + namespace so oncall can map alert →
+        # cluster → pod without cross-referencing dashboards.
+        - alert: VLLMHighTTFT
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(ray_vllm_time_to_first_token_seconds_bucket{tier="production"}[5m])) by (le, model_name, model, ray_io_cluster, namespace)
+            ) > {{ .Values.monitoring.alerts.latency.ttftP95Seconds | default 5 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High P95 TTFT for {{`{{ $labels.model }}`}} ({{`{{ $labels.model_name }}`}})"
+            description: "P95 time-to-first-token is {{`{{ $value | humanizeDuration }}`}} for model={{`{{ $labels.model }}`}} (vllm_model={{`{{ $labels.model_name }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, namespace={{`{{ $labels.namespace }}`}}, threshold: {{ .Values.monitoring.alerts.latency.ttftP95Seconds | default 5 }}s)"
+        - alert: VLLMHighTPOT
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(ray_vllm_request_time_per_output_token_seconds_bucket{tier="production"}[5m])) by (le, model_name, model, ray_io_cluster, namespace)
+            ) > {{ .Values.monitoring.alerts.latency.tpotP95Seconds | default 0.2 }}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High P95 TPOT for {{`{{ $labels.model }}`}} ({{`{{ $labels.model_name }}`}})"
+            description: "P95 time-per-output-token is {{`{{ $value | humanize }}`}}s for model={{`{{ $labels.model }}`}} (vllm_model={{`{{ $labels.model_name }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, namespace={{`{{ $labels.namespace }}`}}, threshold: {{ .Values.monitoring.alerts.latency.tpotP95Seconds | default 0.2 }}s)"
+        - alert: VLLMHighE2ELatency
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(ray_vllm_e2e_request_latency_seconds_bucket{tier="production"}[5m])) by (le, model_name, model, ray_io_cluster, namespace)
+            ) > {{ .Values.monitoring.alerts.latency.e2eP95Seconds | default 30 }}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical E2E latency for {{`{{ $labels.model }}`}} ({{`{{ $labels.model_name }}`}})"
+            description: "P95 end-to-end request latency is {{`{{ $value | humanizeDuration }}`}} for model={{`{{ $labels.model }}`}} (vllm_model={{`{{ $labels.model_name }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, namespace={{`{{ $labels.namespace }}`}}, threshold: {{ .Values.monitoring.alerts.latency.e2eP95Seconds | default 30 }}s)"
+
+    - name: ray-serve-vllm-slo
+      interval: 30s
+      rules:
+        - record: ray_vllm:ttft_p95:5m
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(ray_vllm_time_to_first_token_seconds_bucket[5m])) by (le, model_name)
+            )
+        - record: ray_vllm:tpot_p95:5m
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(ray_vllm_request_time_per_output_token_seconds_bucket[5m])) by (le, model_name)
+            )
+        - record: ray_vllm:throughput_tokens_per_sec:5m
+          expr: >
+            sum(rate(ray_vllm_generation_tokens_total[5m])) by (model_name)
+        - record: ray_vllm:prefix_cache_hit_rate:5m
+          expr: >
+            sum(rate(ray_vllm_prefix_cache_hits_total[5m])) by (model_name)
+            /
+            clamp_min(sum(rate(ray_vllm_prefix_cache_queries_total[5m])) by (model_name), 1)
+    {{- end }}
+
+    # =====================================================================
+    # Synthetic probe alerts — fed by openserve_probe_* metrics from the
+    # open-serve-probe Deployment. All probe targets are tier=production
+    # by design (the probe filters its target list at render time), so
+    # these alerts inherit tier="production" in the metric labels and
+    # don't need an explicit gate.
+    # =====================================================================
+    {{- $probesEnabled := .Values.monitoring.alerts.probes.enabled }}
+    {{- if eq (toString $probesEnabled) "" }}
+    {{- $probesEnabled = .Values.probe.enabled }}
+    {{- end }}
+    {{- if $probesEnabled }}
+    - name: ray-serve-probes
+      interval: 30s
+      rules:
+        - alert: ModelProbeFailed
+          expr: avg_over_time(openserve_probe_success[5m]) < 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Probe failing for {{`{{ $labels.model }}`}} ({{`{{ $labels.endpoint }}`}})"
+            description: "{{`{{ $labels.model }}`}} probe at endpoint={{`{{ $labels.endpoint }}`}}, path={{`{{ $labels.path }}`}} has been failing over the last 5m (success rate {{`{{ $value | humanizePercentage }}`}})"
+        - alert: ModelProbeDownCritical
+          expr: avg_over_time(openserve_probe_success[10m]) < 0.5
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Probe down for {{`{{ $labels.model }}`}} ({{`{{ $labels.endpoint }}`}})"
+            description: "{{`{{ $labels.model }}`}} probe at endpoint={{`{{ $labels.endpoint }}`}} has succeeded less than half the time over the last 10m (success rate {{`{{ $value | humanizePercentage }}`}}). Customer-facing impact likely."
+        # Per-model latency SLO. One ModelProbeHighLatency rule per model
+        # rendered from monitoring.alerts.probes.slo.perModel. Each rule has
+        # its own expr scoped to that specific model with the appropriate
+        # threshold. Models not in perModel won't get a latency alert —
+        # add an entry when adding a new production model.
+        {{- range $modelId, $sloSeconds := .Values.monitoring.alerts.probes.slo.perModel | default dict }}
+        - alert: ModelProbeHighLatency
+          expr: >
+            histogram_quantile(0.95,
+              sum(rate(openserve_probe_latency_seconds_bucket{model="{{ $modelId }}"}[10m])) by (le, model, endpoint, path)
+            ) > {{ $sloSeconds }}
+          for: 10m
+          labels:
+            severity: warning
+            slo_model: {{ $modelId | quote }}
+          annotations:
+            summary: "Slow probe for {{ $modelId }} ({{`{{ $labels.endpoint }}`}})"
+            description: "P95 probe latency for {{ $modelId }} on {{`{{ $labels.endpoint }}`}}/{{`{{ $labels.path }}`}} is {{`{{ $value | humanizeDuration }}`}} (SLO: {{ $sloSeconds }}s)"
+        {{- end }}
+        # Diagnostic: external path is broken but internal liveness is fine.
+        # Points at Gateway/cert/gateway-deployment issues rather than the
+        # model itself.
+        - alert: ExternalGatewayBroken
+          expr: >
+            (openserve_probe_success{endpoint="external"} == 0)
+            and on(model)
+            (openserve_probe_success{endpoint="internal"} == 1)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "External gateway broken (internal probe healthy for {{`{{ $labels.model }}`}})"
+            description: "Probe via the external hostname is failing for {{`{{ $labels.model }}`}} but the internal RayService probe is succeeding — points at the external Gateway, TLS cert, or the gateway Deployment. Customer requests via the public endpoint will be failing."
+    {{- end }}
+
+    # =====================================================================
+    # Tier-aware informational alerts (no severity=critical/warning, no
+    # paging — these go to a low-priority channel for visibility into
+    # internal-test model activity).
+    # =====================================================================
+    - name: ray-serve-tier-info
+      interval: 30s
+      rules:
+        # FYI signal: someone is actively soak-testing an internal-test model.
+        # Helps spot accidental traffic to dev/staging models in prod.
+        - alert: InternalTestModelColdStart
+          expr: increase(ray_serve_deployment_replica_starts_total{tier="internal-test"}[15m]) > 0
+          for: 0m
+          labels:
+            severity: info
+            tier: internal-test
+          annotations:
+            summary: "Internal-test model started: {{`{{ $labels.deployment }}`}} ({{`{{ $labels.model }}`}})"
+            description: "{{`{{ $labels.deployment }}`}} (model={{`{{ $labels.model }}`}}, ray_cluster={{`{{ $labels.ray_io_cluster }}`}}, tier=internal-test) had a replica start in the last 15m — someone is exercising it. Not paged."
+{{- end }}

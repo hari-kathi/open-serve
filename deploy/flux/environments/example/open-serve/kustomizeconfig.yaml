@@ -1,0 +1,9 @@
+# Teach kustomize that HelmRelease.spec.valuesFrom[].name is a ConfigMap
+# name reference, so the configMapGenerator's hash suffix is propagated
+# into the HelmRelease (values changes then trigger a Helm upgrade).
+nameReference:
+- kind: ConfigMap
+  version: v1
+  fieldSpecs:
+  - path: spec/valuesFrom/name
+    kind: HelmRelease

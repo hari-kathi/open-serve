@@ -1,0 +1,85 @@
+# kube-prometheus-stack values for this environment.
+
+# CRDs are installed by the prometheus-operator-crds HelmRelease.
+crds:
+  enabled: false
+
+# On managed Kubernetes (GKE/EKS/AKS) the provider runs the control plane —
+# kube-controller-manager, kube-scheduler, kube-proxy, and etcd metrics
+# endpoints are not exposed to the cluster. Leaving these chart components
+# on the default (enabled) makes the bundled Down alerts fire continuously
+# with zero scrape targets. Disable both the ServiceMonitors and the
+# PrometheusRules they ship. Re-enable on self-managed clusters.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+# Some managed offerings (e.g. GKE) run CoreDNS without exposing the
+# `/metrics` endpoint targeted by the chart's bundled scrape, making the
+# default ServiceMonitor + TargetDown rule fire continuously. Disable if
+# that applies to your cluster.
+coreDns:
+  enabled: false
+
+# Disable the CPU/Memory overcommit warnings shipped by kube-prometheus-stack.
+# On autoscaler-driven GPU clusters, head + worker pods reserve the full
+# GPU-node capacity but only consume it during inference, so
+# KubeCPUOvercommit*/KubeMemoryOvercommit* fire as steady-state noise rather
+# than real signals.
+defaultRules:
+  rules:
+    kubernetesResources: false
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "50GB"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 1
+        memory: 4Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    # Discover PodMonitors/ServiceMonitors/Rules from all namespaces, not
+    # just those carrying the Helm release labels — required for the
+    # monitors the open-serve chart creates.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+grafana:
+  sidecar:
+    dashboards:
+      # Auto-load dashboards from ConfigMaps labeled grafana_dashboard=1
+      # (the open-serve chart ships its Ray/vLLM dashboards this way).
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: open-serve
+  grafana.ini:
+    security:
+      allow_embedding: true
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+  persistence:
+    enabled: true
+    size: 10Gi
+
+alertmanager:
+  enabled: true
+  # Configure receivers/routes for your paging or chat system here. Mount
+  # webhook URLs from a Secret via alertmanagerSpec.secrets and reference
+  # them with api_url_file rather than inlining credentials in values.

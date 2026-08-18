@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/configs
+
+# The open-serve-worker ServiceAccount needs read access to your model
+# bucket. How you grant it is cloud-specific. On GKE, annotate the KSA with
+# a GCP service account via Workload Identity (the GCP SA needs
+# roles/storage.objectViewer on the bucket). Uncomment and adapt:
+#
+# patches:
+#   - target:
+#       kind: ServiceAccount
+#       name: open-serve-worker
+#     patch: |
+#       - op: add
+#         path: /metadata/annotations
+#         value:
+#           iam.gke.io/gcp-service-account: <gcp-sa-name>@<gcp-project>.iam.gserviceaccount.com
+#
+# On EKS use the eks.amazonaws.com/role-arn annotation (IRSA); on AKS use
+# azure.workload.identity/client-id.

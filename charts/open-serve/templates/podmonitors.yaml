@@ -1,0 +1,80 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ray-head-monitor
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: ray
+    component: head
+spec:
+  selector:
+    matchLabels:
+      ray.io/node-type: head
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
+          targetLabel: ray_io_cluster
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_ray_io_node_type]
+          targetLabel: node_type
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_model]
+          targetLabel: model
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_open_serve_io_tier]
+          targetLabel: tier
+          action: replace
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+          action: replace
+  namespaceSelector:
+    any: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ray-worker-monitor
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: ray
+    component: worker
+spec:
+  selector:
+    matchLabels:
+      ray.io/node-type: worker
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_ray_io_cluster]
+          targetLabel: ray_io_cluster
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_ray_io_node_type]
+          targetLabel: node_type
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_model]
+          targetLabel: model
+          action: replace
+        - sourceLabels: [__meta_kubernetes_pod_label_open_serve_io_tier]
+          targetLabel: tier
+          action: replace
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+          action: replace
+  namespaceSelector:
+    any: true
+{{- end }}

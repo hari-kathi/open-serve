@@ -1,0 +1,25 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kuberay-operator
+  namespace: open-serve
+spec:
+  chart:
+    spec:
+      chart: kuberay-operator
+      # Track the 1.x line; pin an exact version once validated in your
+      # environment.
+      version: "1.x"
+      sourceRef:
+        kind: HelmRepository
+        name: kuberay
+        namespace: open-serve
+  interval: 10m
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3

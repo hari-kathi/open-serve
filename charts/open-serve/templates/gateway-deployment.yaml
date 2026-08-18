@@ -1,0 +1,94 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-serve-gateway
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-gateway
+    app.kubernetes.io/component: gateway
+spec:
+  replicas: {{ .Values.gateway.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: open-serve-gateway
+  template:
+    metadata:
+      labels:
+        app: open-serve-gateway
+        app.kubernetes.io/component: gateway
+      annotations:
+        # Force rollout on config changes
+        checksum/config: {{ include (print $.Template.BasePath "/gateway-configmap.yaml") . | sha256sum }}
+        # Tell cluster-autoscaler this pod is safe to evict only when
+        # the PDB allows it (rather than the default of "evict freely
+        # to drain a node"). Belt-and-suspenders with the
+        # PodDisruptionBudget in gateway-pdb.yaml — together they
+        # prevent 503 "connection termination" errors caused by the
+        # autoscaler scaling down the nodes hosting the gateway.
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      containers:
+        - name: gateway
+          image: {{ .Values.gateway.image.registry | default "ghcr.io" }}/{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag }}
+          imagePullPolicy: {{ .Values.gateway.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          env:
+            - name: API_KEY_MAP_FILE
+              value: "/secrets/key-map.json"
+            - name: BACKEND_ROUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: open-serve-gateway-config
+                  key: backend-routes.json
+            - name: DEFAULT_BACKEND_URL
+              value: {{ .Values.gateway.defaultBackendUrl | default "http://rayservice-llm-serve-svc:8000" | quote }}
+            {{- if .Values.gateway.modelRoutes }}
+            - name: MODEL_ROUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: open-serve-gateway-config
+                  key: model-routes.json
+            {{- end }}
+            - name: MODEL_TIER_MAP_FILE
+              value: "/config/model-tier-map.json"
+          volumeMounts:
+            - name: api-keys
+              mountPath: /secrets
+              readOnly: true
+            - name: model-tier-map
+              mountPath: /config
+              readOnly: true
+          resources:
+            {{- toYaml .Values.gateway.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: api-keys
+          secret:
+            secretName: {{ .Values.gateway.apiKeySecret.name | default "open-serve-api-keys" }}
+            items:
+              - key: {{ .Values.gateway.apiKeySecret.key | default "key-map.json" }}
+                path: key-map.json
+        - name: model-tier-map
+          configMap:
+            name: open-serve-gateway-config
+            items:
+              - key: model-tier-map.json
+                path: model-tier-map.json
+{{- end }}

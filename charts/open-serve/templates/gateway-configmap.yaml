@@ -1,0 +1,38 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: open-serve-gateway-config
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-gateway
+    app.kubernetes.io/component: gateway
+data:
+  backend-routes.json: |
+    {{- $routes := list }}
+    {{- range .Values.gateway.backends }}
+    {{- $route := dict "prefix" .pathPrefix "url" (printf "http://%s:%s" .service (toString (.port | default 8000))) }}
+    {{- $routes = append $routes $route }}
+    {{- end }}
+    {{ $routes | toJson }}
+  {{- if .Values.gateway.modelRoutes }}
+  model-routes.json: |
+    {{- $modelRoutes := dict }}
+    {{- range $model, $backend := .Values.gateway.modelRoutes }}
+    {{- $_ := set $modelRoutes $model (printf "http://%s:%s" $backend.service (toString ($backend.port | default 8000))) }}
+    {{- end }}
+    {{ $modelRoutes | toJson }}
+  {{- end }}
+  model-tier-map.json: |
+    {{- $tierMap := dict }}
+    {{- range $name, $model := .Values.serveModels }}
+    {{- if $model.enabled }}
+    {{- $tier := $model.tier | default "internal-test" }}
+    {{- $_ := set $tierMap $name $tier }}
+    {{- if $model.modelId }}
+    {{- $_ := set $tierMap $model.modelId $tier }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{ $tierMap | toJson }}
+{{- end }}

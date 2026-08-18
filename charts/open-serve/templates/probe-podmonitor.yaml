@@ -1,0 +1,36 @@
+{{- if and .Values.probe.enabled .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: open-serve-probe-monitor
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-probe
+    component: probe
+spec:
+  selector:
+    matchLabels:
+      app: open-serve-probe
+  podMetricsEndpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+      scheme: http
+      # The probe emits an `endpoint` label on every metric (values: internal,
+      # external) to distinguish per-model RayService probes from gateway
+      # probes. Without honorLabels, the scrape adds endpoint=http (port name)
+      # and renames the application's label to exported_endpoint — which
+      # silently breaks ExternalGatewayBroken (matches endpoint="external")
+      # and the SLO dashboard's per-endpoint panels. honorLabels preserves
+      # the application's label.
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+          action: replace
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+          action: replace
+  namespaceSelector:
+    any: true
+{{- end }}

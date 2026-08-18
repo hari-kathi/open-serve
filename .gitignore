@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# OS
+.DS_Store
+
+# Helm
+charts/**/*.tgz
+charts/**/charts/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.auto.tfvars.example
+.terraform.lock.hcl
+
+# Editors
+.idea/
+.vscode/
+
+# Local
+*.local
+.env

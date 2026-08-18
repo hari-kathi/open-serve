@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/open-serve
+  # To expose the gateway on a cloud internal load balancer, copy
+  # internal-lb.yaml.example to internal-lb.yaml, adapt it, and add it here:
+  # - internal-lb.yaml
+configurations:
+  - kustomizeconfig.yaml
+configMapGenerator:
+  - name: open-serve-values
+    namespace: open-serve
+    files:
+      - values.yaml=values.yaml
+patches:
+  - path: release.yaml
+    target:
+      kind: HelmRelease

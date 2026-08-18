@@ -1,0 +1,19 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-serve-gateway
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-gateway
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: open-serve-gateway
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+{{- end }}

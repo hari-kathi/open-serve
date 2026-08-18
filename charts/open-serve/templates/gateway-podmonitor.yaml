@@ -1,0 +1,28 @@
+{{- if and .Values.gateway.enabled .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: gateway-monitor
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-gateway
+    component: gateway
+spec:
+  selector:
+    matchLabels:
+      app: open-serve-gateway
+  podMetricsEndpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+      scheme: http
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+          action: replace
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+          action: replace
+  namespaceSelector:
+    any: true
+{{- end }}

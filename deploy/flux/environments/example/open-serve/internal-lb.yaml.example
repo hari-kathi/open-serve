@@ -1,0 +1,29 @@
+# Optional: expose the open-serve gateway on an internal LoadBalancer so
+# peered VPCs / other clusters can reach it without going through the
+# public gateway.
+#
+# Copy to internal-lb.yaml, adapt the annotations for your cloud, and add
+# `- internal-lb.yaml` to this directory's kustomization.yaml resources.
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-serve-ilb
+  namespace: open-serve
+  annotations: {}
+    # --- GKE example ---
+    # networking.gke.io/load-balancer-type: "Internal"
+    # networking.gke.io/internal-load-balancer-allow-global-access: "true"
+    # --- EKS (AWS Load Balancer Controller) example ---
+    # service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+    # --- AKS example ---
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  # Optionally pin a static internal IP reserved in your VPC:
+  # loadBalancerIP: "<reserved-internal-ip>"
+  selector:
+    app: open-serve-gateway
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

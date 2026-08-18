@@ -1,0 +1,39 @@
+{{- if .Values.probe.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: open-serve-probe-config
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-probe
+    app.kubernetes.io/component: probe
+data:
+  targets.yaml: |
+    schedule:
+      intervalSeconds: {{ .Values.probe.intervalSeconds | default 900 }}
+    defaultTimeoutSeconds: {{ .Values.probe.defaultTimeoutSeconds | default 30 }}
+    {{- if and .Values.externalGateway.enabled .Values.externalGateway.hostname }}
+    externalUrl: {{ printf "https://%s" .Values.externalGateway.hostname | quote }}
+    {{- else }}
+    externalUrl: null
+    {{- end }}
+    {{- if .Values.gateway.enabled }}
+    authBearerKey: {{ .Values.probe.authSourceName | default "monitor" | quote }}
+    {{- else }}
+    authBearerKey: null
+    {{- end }}
+    # Targets: production-tier models only. Internal-test models are not
+    # probed at all (probing them would either wake workers or yield false
+    # negatives via the gateway's /v1/models routing). Per-target
+    # internalUrl bypasses the gateway and hits the model's own
+    # RayService for accurate per-model liveness; functional probes go
+    # through the gateway via externalUrl to exercise the full path.
+    targets:
+      {{- range $name, $model := .Values.serveModels }}
+      {{- if and $model.enabled (eq ($model.tier | default "internal-test") "production") }}
+      - modelId: {{ $model.modelId | default $name | quote }}
+        runner: {{ $model.runner | default "chat" | quote }}
+        internalUrl: {{ printf "http://rayservice-%s-serve-svc:8000" $name | quote }}
+      {{- end }}
+      {{- end }}
+{{- end }}

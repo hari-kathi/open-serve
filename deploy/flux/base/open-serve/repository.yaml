@@ -1,0 +1,14 @@
+# The open-serve Helm chart, published as an OCI artifact.
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: open-serve
+  namespace: open-serve
+spec:
+  # Uncomment for registries that use ambient cloud credentials, e.g. GCP
+  # Artifact Registry with Workload Identity:
+  # provider: gcp
+  interval: 5m0s
+  url: oci://ghcr.io/hari-kathi/charts/open-serve
+  ref:
+    tag: 0.1.0

@@ -1,0 +1,9 @@
+# ServiceAccount attached to Ray worker pods. Model weights are pulled from
+# object storage using this identity — bind it to a cloud IAM principal in
+# your environment overlay (see environments/example/configs/ for a
+# commented-out GKE Workload Identity example).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: open-serve-worker
+  namespace: open-serve

@@ -1,0 +1,47 @@
+# open-serve chart values for this environment.
+
+gateway:
+  enabled: true
+
+monitoring:
+  enabled: true
+  dashboards:
+    enabled: true
+
+# Synthetic end-to-end probe — enable in production once you have
+# tier:production models deployed.
+probe:
+  enabled: false
+
+statusPage:
+  enabled: true
+
+# Models served in this environment. Start from a catalog preset
+# (catalog/models/) and set enabled: true. Example:
+#
+# serveModels:
+#   qwen3-8b:
+#     enabled: true
+#     modelId: "Qwen/Qwen3-8B"
+#     tier: production
+#     type: vllm-raw
+#     routePrefix: "/"
+#     sharedMemorySize: "20Gi"
+#     vllmArgs:
+#       model: "Qwen/Qwen3-8B"
+#       served_model_name: "Qwen/Qwen3-8B"
+#       # Or pre-stage weights and point at your bucket:
+#       # model_source: gs://<your-model-bucket>/models/Qwen/Qwen3-8B
+#       tensor_parallel_size: 1
+#       dtype: "bfloat16"
+#       max_model_len: 32768
+#       gpu_memory_utilization: 0.90
+#     replicas: { min: 0, max: 1 }
+#     autoscaling:
+#       targetOngoingRequests: 5
+#       downscaleDelayS: 600
+#       upscaleDelayS: 60
+#     gpu:
+#       count: 1
+#       acceleratorType: "A100"
+serveModels: {}

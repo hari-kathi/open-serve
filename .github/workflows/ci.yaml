@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  naming-lint:
+    name: forbidden-strings lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on internal identifiers
+        run: |
+          set -e
+          # The project was extracted from an internal codebase; these strings must never appear.
+          PATTERNS='pryon|ml-serving|mlserving|us-docker\.pkg\.dev|bitbucket'
+          MATCHES=$(grep -rIiEn "$PATTERNS" . \
+            --exclude-dir=.git --exclude-dir=.github || true)
+          if [ -n "$MATCHES" ]; then
+            echo "Forbidden internal identifiers found:"
+            echo "$MATCHES"
+            exit 1
+          fi
+
+  gitleaks:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  python-tests:
+    name: ${{ matrix.service }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [gateway, probe, status]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        working-directory: services/${{ matrix.service }}
+        run: |
+          pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pytest ruff
+      - name: Lint
+        working-directory: services/${{ matrix.service }}
+        run: ruff check .
+      - name: Test
+        working-directory: services/${{ matrix.service }}
+        run: |
+          if [ -d tests ]; then pytest -q; else echo "no tests yet"; fi
+
+  helm:
+    name: helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint charts/open-serve
+      - run: helm template smoke charts/open-serve > /dev/null

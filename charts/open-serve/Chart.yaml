@@ -1,0 +1,9 @@
+apiVersion: v2
+name: open-serve
+description: Batteries-included model serving on Kubernetes with Ray Serve and vLLM
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/hari-kathi/open-serve
+sources:
+  - https://github.com/hari-kathi/open-serve

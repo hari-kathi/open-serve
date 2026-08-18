@@ -1,0 +1,92 @@
+{{- if .Values.statusPage.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-serve-status
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-status
+    app.kubernetes.io/component: status
+spec:
+  # The status page is read-only — no per-pod state. Two replicas for HA;
+  # the in-memory snapshot cache is per-pod and re-warms within
+  # CACHE_TTL_SECONDS on cold start.
+  replicas: {{ .Values.statusPage.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: open-serve-status
+  template:
+    metadata:
+      labels:
+        app: open-serve-status
+        app.kubernetes.io/component: status
+      annotations:
+        # Force rollout on config changes (branding, SLO map, etc.).
+        checksum/config: {{ include (print $.Template.BasePath "/status-configmap.yaml") . | sha256sum }}
+        # Same eviction guard as the gateway: cluster-autoscaler should not
+        # drain a status pod just because the node is underutilized; the
+        # PDB controls evictions instead.
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+    spec:
+      containers:
+        - name: status
+          image: {{ .Values.statusPage.image.registry | default "ghcr.io" }}/{{ .Values.statusPage.image.repository }}:{{ .Values.statusPage.image.tag }}
+          imagePullPolicy: {{ .Values.statusPage.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          env:
+            - name: PROMETHEUS_URL
+              value: {{ .Values.statusPage.prometheusUrl | default "http://kube-prometheus-stack-prometheus.open-serve.svc:9090" | quote }}
+            - name: CACHE_TTL_SECONDS
+              value: {{ .Values.statusPage.cacheTtlSeconds | default 30 | quote }}
+            - name: STRIP_DAYS
+              value: {{ .Values.statusPage.stripDays | default 14 | quote }}
+            - name: RECENT_HISTORY_DAYS
+              value: {{ .Values.statusPage.recentHistoryDays | default 30 | quote }}
+            - name: INCIDENT_MIN_CONSECUTIVE_SAMPLES
+              value: {{ .Values.statusPage.incidentMinConsecutiveSamples | default 2 | quote }}
+            - name: PROBE_INTERVAL_S
+              value: {{ .Values.statusPage.probeIntervalSeconds | default 900 | quote }}
+            - name: DEFAULT_LATENCY_SLO_S
+              value: {{ .Values.statusPage.defaultLatencySloS | default 10 | quote }}
+            - name: MODEL_METADATA_FILE
+              value: "/config/model-metadata.json"
+            - name: SLO_CONFIG_FILE
+              value: "/config/slo-config.json"
+            - name: CATEGORY_ORDER_FILE
+              value: "/config/category-order.json"
+            - name: BRANDING_TITLE
+              value: {{ .Values.statusPage.branding.title | default "open-serve Status" | quote }}
+            - name: BRANDING_LOGO_URL
+              value: {{ .Values.statusPage.branding.logoUrl | default "" | quote }}
+            - name: BRANDING_FOOTER_LINK_TEXT
+              value: {{ .Values.statusPage.branding.footerLinkText | default "" | quote }}
+            - name: BRANDING_FOOTER_LINK_URL
+              value: {{ .Values.statusPage.branding.footerLinkUrl | default "" | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          resources:
+            {{- toYaml .Values.statusPage.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: config
+          configMap:
+            name: open-serve-status-config
+{{- end }}

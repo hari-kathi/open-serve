@@ -1,0 +1,11 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.dashboards.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: open-serve-grafana-dashboards
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{- (.Files.Glob "dashboards/*.json").AsConfig | nindent 2 }}
+{{- end }}

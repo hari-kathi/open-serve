@@ -1,0 +1,372 @@
+# open-serve — batteries-included model serving on Kubernetes with Ray Serve
+# and vLLM. Deploys RayService CRDs for enabled models plus gateway, synthetic
+# probe, status page, and observability resources.
+
+# Default container image for Ray head and worker pods.
+# Individual models can override this via the 'image' field.
+# open-serve-ray-serve-llm = Ray image with ray.serve.llm (type: ray-serve-llm).
+# open-serve-vllm          = Ray + vLLM ASGI passthrough image (type: vllm-raw);
+#                            models of that type typically override with it.
+image:
+  registry: ghcr.io
+  repository: hari-kathi/open-serve-ray-serve-llm
+  tag: "0.1.0"
+
+# ServiceAccount used by Ray head and worker pods — e.g. for object-storage
+# access to model weights via workload identity / IRSA. Must exist in the
+# release namespace.
+serviceAccount:
+  name: "open-serve-worker"
+
+# Worker pod readiness probe override.
+# By default KubeRay injects a readiness probe that hits `:8000/-/healthz`,
+# which goes green as soon as the Ray Serve HTTP proxy actor starts — *before*
+# the LLMServer replica finishes loading model weights. That makes pods report
+# 1/1 Ready while inference would actually time out.
+#
+# When enabled, the chart sets an explicit readinessProbe that polls the Ray
+# dashboard's `/api/serve/applications/` and only flips Ready once at least one
+# matching deployment replica is RUNNING. Doesn't affect Ray Serve's internal
+# request routing (which is already correct), but makes kubectl, KubeRay
+# endpoint health, and dashboards honest.
+#
+# Defaults to false — opt in via your own values overlay.
+workerReadinessProbe:
+  enabled: false
+
+# Force KubeRay zero-downtime cluster swap when worker-group replicas change.
+# Workaround for a kuberay-operator gap: changes to
+# `RayService.spec.rayClusterConfig.workerGroupSpecs[*].{minReplicas,maxReplicas}`
+# do NOT propagate to the active RayCluster, and the change isn't structural
+# enough to trigger a pending-cluster rebuild either. Result: a `replicas.max`
+# bump in values.yaml lands in the RayService spec but the live RayCluster
+# stays at the value it was first created with — Ray's autoscaler is silently
+# capped, and the only fix is `kubectl patch raycluster ... maxReplicas=N`.
+#
+# When enabled, the chart adds a `checksum/worker-config` annotation on the
+# head and worker pod templates, hashed from the full per-model values. Any
+# change to a model's configuration shifts the hash → KubeRay treats the pod
+# template as changed → triggers its zero-downtime upgrade (pending RayCluster
+# boots with the new spec, then the service swaps over once healthy).
+#
+# Defaults off so enabling the chart is inert; opt in by setting
+# `rayClusterChecksum.enabled: true` in your overlay.
+rayClusterChecksum:
+  enabled: false
+
+# Monitoring resources (integrates into an existing kube-prometheus-stack)
+monitoring:
+  enabled: true
+  dashboards:
+    enabled: true
+  alerts:
+    # vLLM-specific alerts (disable if no vLLM models are deployed)
+    vllm:
+      enabled: true
+    # Generic alert thresholds (apply to all model types)
+    latency:
+      rayServeP95Ms: 10000        # Ray Serve processing latency P95 (ms)
+      ttftP95Seconds: 5           # vLLM time-to-first-token P95 (seconds)
+      tpotP95Seconds: 0.2         # vLLM time-per-output-token P95 (seconds)
+      e2eP95Seconds: 30           # vLLM end-to-end request latency P95 (seconds)
+    availability:
+      errorRateThreshold: 0.05    # HTTP error rate (5%)
+      replicaRestartsThreshold: 3 # Restarts in 10m window
+    saturation:
+      gpuMemoryWarning: 0.95      # GPU memory utilization warning
+      gpuMemoryCritical: 0.98     # GPU memory utilization critical
+      queueDepthThreshold: 10     # Active processing queries per replica
+      queuedQueriesThreshold: 20  # Queued queries per deployment
+    # Synthetic probe alerts (rendered when probes.enabled=true; defaults to
+    # probe.enabled). Per-model latency SLOs cap acceptable probe-cycle p95
+    # latency — set above the cold-start floor for the model but tight
+    # enough to catch real degradation. One ModelProbeHighLatency alert
+    # rule renders per perModel entry. Models without an entry get no
+    # latency alert (add one when promoting a new model to production).
+    # Embedding models are near-instant; LLMs scale with size.
+    probes:
+      enabled: ""               # "" → defaults to probe.enabled
+      slo:
+        perModel: {}
+          # qwen3-8b: 10
+          # mixedbread-ai/mxbai-embed-large-v1: 1
+
+# =============================================================================
+# Gateway — API key authentication, backend routing, usage metrics
+# =============================================================================
+# Deployed as a separate K8s Deployment in front of Ray Serve.
+# When enabled, point your internal load balancer / ingress at the gateway
+# instead of the Ray Serve head pod.
+gateway:
+  enabled: false
+  image:
+    registry: ghcr.io
+    repository: hari-kathi/open-serve-gateway
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  # Secret containing JSON map: {"api-key-value": "source-name", ...}
+  apiKeySecret:
+    name: "open-serve-api-keys"
+    key: "key-map.json"
+  # Default backend for requests that don't match any path prefix
+  defaultBackendUrl: "http://rayservice-llm-serve-svc:8000"
+  # Path-based routing to multiple Ray Serve backends
+  backends:
+    - pathPrefix: "/v1"
+      service: "rayservice-llm-serve-svc"
+      port: 8000
+    # Additional backends (uncomment when models are deployed):
+    # - pathPrefix: "/reranker"
+    #   service: "rayservice-reranker-serve-svc"
+    #   port: 8000
+    # - pathPrefix: "/embed"
+    #   service: "rayservice-embed-serve-svc"
+    #   port: 8000
+
+# =============================================================================
+# Synthetic Probe — exercises every tier=production model end-to-end
+# =============================================================================
+# Long-running Deployment with an internal scheduler. Probes only models
+# with tier=production. Each cycle, per target:
+#
+# * Internal liveness — direct to the model's RayService, runner-aware:
+#     - chat / embedding: GET /v1/models, asserts model_id is registered
+#     - any other runner: GET /-/healthy (Ray Serve universal health)
+# * External functional — via the gateway, runner-aware:
+#     - chat:      POST /v1/chat/completions (asserts choices in response)
+#     - embedding: POST /v1/embeddings (asserts embedding in response)
+#     - any other runner: SKIPPED until a tailored handler is added in
+#       the probe service (see its module docstring's extension contract)
+#
+# Internal-test models are never probed. The runner field on each
+# serveModels entry is open-ended — built-ins are 'chat' and 'embedding';
+# any other string falls back to the generic /-/healthy liveness probe so
+# new model types (rerankers, classifiers, OCR, etc.) get coverage out of
+# the box and a tailored functional probe can be added incrementally.
+probe:
+  enabled: false
+  image:
+    registry: ghcr.io
+    repository: hari-kathi/open-serve-probe
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+  # Probe cadence (seconds). 900 = 15 minutes.
+  intervalSeconds: 900
+  defaultTimeoutSeconds: 30
+  # Source name (as mapped in the gateway's key-map.json) whose API key the
+  # probe presents as a Bearer token for external functional probes.
+  authSourceName: "monitor"
+
+# =============================================================================
+# Status Page — public per-model health view modeled on
+# status.huggingface.co and status.openai.com.
+# =============================================================================
+# Read-only FastAPI service that consumes the same openserve_probe_* metrics
+# the probe (above) writes to Prometheus, and renders a three-tier
+# (green/orange/red) status page with daily uptime bars + collapsible per-
+# endpoint sub-rows.
+# ClusterIP only — expose externally via the gateway.
+# Category and description for each model row are read from
+# serveModels[<name>].{category, description} in this same values file.
+statusPage:
+  enabled: false
+  image:
+    registry: ghcr.io
+    repository: hari-kathi/open-serve-status
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicas: 2
+  # Sized for the snapshot build: daily-strip aggregation + 30-day
+  # incident-detection range queries over multiple model×endpoint series
+  # push baseline RSS to ~150Mi and need bursty CPU during cache warm-up.
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "192Mi"
+    limits:
+      cpu: "500m"
+      memory: "384Mi"
+  # In-cluster Prometheus URL. Default matches the Service name produced by
+  # the kube-prometheus-stack chart (release name `kube-prometheus-stack`)
+  # installed in the open-serve namespace. Override for deployments using a
+  # different observability stack, namespace, or release name.
+  prometheusUrl: "http://kube-prometheus-stack-prometheus.open-serve.svc:9090"
+  # Snapshot cache TTL; controls Prometheus query frequency under page load.
+  cacheTtlSeconds: 30
+  # Uptime strip window length in days. Each bar is one UTC hour, so the
+  # strip renders stripDays*24 bars and scrolls horizontally (latest on the
+  # right). Bounded by Prometheus retention (typically 30d); default 14 keeps
+  # the bar count (~336) and DOM weight reasonable at hourly granularity.
+  stripDays: 14
+  # Window for the auto-derived Recent History daily cards.
+  recentHistoryDays: 30
+  # Minimum consecutive failed probe samples to count an incident.
+  # Default 2 filters out single-sample blips from KubeRay zero-downtime
+  # swaps. With 15-min probe cadence, this means a real outage takes ≥15
+  # minutes to surface in the page.
+  incidentMinConsecutiveSamples: 2
+  # Probe cadence (seconds). Must match probe.intervalSeconds so the
+  # status service samples Prometheus at the right granularity.
+  probeIntervalSeconds: 900
+  # Latency SLO used for "degraded" classification when no per-model SLO is
+  # configured in monitoring.alerts.probes.slo.perModel.
+  defaultLatencySloS: 10
+  # Section ordering on the page. Categories used in serveModels[<name>].category
+  # are rendered in this order; categories not in the list are appended
+  # alphabetically. Designed to work uniformly across common model types
+  # (LLM, Vision-Language, Embedding) and ones likely to come (Reranker,
+  # OCR, Audio, custom "Model" for anything else).
+  # Operators with deployments featuring different model mixes can reorder
+  # freely — the status service treats this as a hint, not a fixed schema.
+  categoryOrder:
+    - LLM
+    - Vision-Language
+    - Embedding
+    - Reranker
+    - OCR
+    - Audio
+    - Model
+    - Other
+  # Operator-overridable branding.
+  branding:
+    title: "open-serve Status"
+    logoUrl: ""
+    footerLinkText: ""
+    footerLinkUrl: ""
+
+# =============================================================================
+# External Gateway — Kubernetes Gateway API for external HTTPS access
+# =============================================================================
+# Requires: gateway.enabled=true (routes to the gateway, not Ray Serve directly)
+# Requires: a Gateway API implementation installed on the cluster
+externalGateway:
+  enabled: false
+  # Gateway API class name. The default targets GKE's global external managed
+  # load balancer, but any Gateway API implementation works (Istio,
+  # Envoy Gateway, NGINX Gateway Fabric, etc.) — set its class name here.
+  className: "gke-l7-global-external-managed"
+  # Hostname for the external endpoint.
+  hostname: "models.example.com"
+  # Optional: static external IP name. When set, rendered as a NamedAddress
+  # on the Gateway.
+  addressName: ""
+  # Optional (GKE only): Certificate Manager certificate map name. When set,
+  # rendered as the networking.gke.io/certmap annotation.
+  certMap: ""
+  # Optional (GKE only): GCPBackendPolicy overriding the GCP external
+  # Application Load Balancer's default 30s backend service timeout, which
+  # terminates streaming inference responses prematurely (504 "stream
+  # timeout"). 600s (10m) gives generous headroom for long completions.
+  # (HTTPRoute `timeouts` are not supported on gke-l7-global-external-managed;
+  # GCPBackendPolicy is the only knob.)
+  gcpBackendPolicy:
+    enabled: false
+    timeoutSec: 600
+
+# =============================================================================
+# Serve Models — each gets its own RayService
+# =============================================================================
+# Three patterns supported via the `type:` field:
+#
+#   type: ray-serve-llm — ray.serve.llm pattern: provide an inline serveScript
+#                      (or serveScriptFile) that builds an LLMConfig +
+#                      build_openai_app application; the chart injects it into
+#                      a ConfigMap mounted at /app/serve-scripts. Only exposes
+#                      the chat/completions/embeddings subset that
+#                      ray.serve.llm.build_openai_app proxies.
+#
+#   type: vllm-raw   — drop ray.serve.llm entirely. The open-serve-vllm
+#                      image bakes vllm_serve_app.py at /home/ray (on
+#                      PYTHONPATH); it mounts vLLM's own FastAPI app via
+#                      @serve.ingress so every route vLLM registers is
+#                      reachable (/v1/responses, /v1/score, /v1/rerank,
+#                      /tokenize, /pooling, /classify, audio transcriptions,
+#                      etc.). Provide vLLM CLI flags as snake_case keys under
+#                      `vllmArgs:`; the chart wires them into
+#                      serveConfigV2.applications[].args. Override Ray Serve
+#                      deployment options (num_gpus, replicas) via the
+#                      standard replicas/autoscaling/gpu fields — the chart
+#                      emits a deployments: block targeting the VLLMOpenAI
+#                      deployment name.
+#
+#   type: custom     — Non-LLM models (CNNs, rerankers, classifiers, etc.).
+#                      Provide importPath + (optionally) serveScript or
+#                      serveScriptFile to inject Python into a ConfigMap.
+#
+# For all three: each model gets an independent RayService with its own head
+# and workers. GPU is optional (set gpu.count: 0 for CPU-only models).
+#
+# Stacking many Serve replicas on one physical GPU:
+# - gpu.count — per-replica Ray fraction (Serve ray_actor_options.num_gpus), e.g. 0.25.
+# - gpu.workerGpus — GPUs the Ray worker pod advertises (rayStartParams num-gpus) and, unless
+#   gpu.kubernetesGpu is set, the pod nvidia.com/gpu request. Omit to default to ceil(gpu.count).
+# - replicas.min / replicas.max — Serve autoscaling only.
+# - replicas.workerMin / replicas.workerMax — Ray worker pod count (KubeRay worker group); use 1/1
+#   to keep a single GPU node while scaling Serve replicas up to floor(workerGpus/count).
+# VRAM: each replica typically loads its own model weights — profile before raising max.
+serveModels: {}
+  # qwen3-8b:
+  #   enabled: true
+  #   modelId: "Qwen/Qwen3-8B"
+  #   type: vllm-raw
+  #   tier: internal-test          # promote to "production" to enable probing
+  #   runner: chat
+  #   category: LLM
+  #   description: "Qwen3 8B general-purpose chat model"
+  #   rayVersion: "2.55.1"
+  #   image:
+  #     repository: "hari-kathi/open-serve-vllm"
+  #     tag: "0.1.0"
+  #   routePrefix: "/"
+  #   sharedMemorySize: "20Gi"
+  #   # Every key under vllmArgs forwards into vLLM's own argparse
+  #   # (snake_case → --kebab-case). Booleans become flag-only when true.
+  #   # Strings, ints, floats pass through verbatim. Dicts must be
+  #   # serialised as JSON strings — vLLM parses them with json.loads.
+  #   vllmArgs:
+  #     model: "Qwen/Qwen3-8B"
+  #     served_model_name: "Qwen/Qwen3-8B"
+  #     # Pre-staged weights in your own bucket, e.g.
+  #     # model_source: "gs://<your-model-bucket>/public-models/Qwen/Qwen3-8B"
+  #     tensor_parallel_size: 1
+  #     dtype: "bfloat16"
+  #     max_model_len: 32768
+  #     max_num_seqs: 32
+  #     gpu_memory_utilization: 0.90
+  #     enable_auto_tool_choice: true
+  #     tool_call_parser: "hermes"
+  #   replicas:
+  #     min: 0
+  #     max: 1
+  #   autoscaling:
+  #     targetOngoingRequests: 5
+  #     downscaleDelayS: 600
+  #     upscaleDelayS: 60
+  #   gpu:
+  #     count: 1
+  #     acceleratorType: "A100"     # Ray routes actors to matching workers
+  #     nodeSelector:
+  #       workload-type: gpu-a100-1x
+  #   resources:
+  #     head:
+  #       requests: { cpu: "2", memory: "8Gi" }
+  #       limits:   { cpu: "3", memory: "12Gi" }
+  #     worker:
+  #       requests: { cpu: "8", memory: "32Gi" }
+  #       limits:   { cpu: "8", memory: "48Gi" }

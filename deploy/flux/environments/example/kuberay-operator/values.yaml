@@ -1,0 +1,33 @@
+# KubeRay operator values for this environment.
+# Bump replicaCount to 2 for HA in production environments.
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+serviceAccount:
+  create: true
+
+rbac:
+  create: true
+
+leaderElection:
+  enabled: true
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Optionally pin the operator to a system node pool, e.g.:
+# nodeSelector:
+#   workload-type: system-cpu

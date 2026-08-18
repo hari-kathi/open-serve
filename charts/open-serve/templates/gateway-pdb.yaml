@@ -1,0 +1,19 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: open-serve-gateway
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-gateway
+    app.kubernetes.io/component: gateway
+spec:
+  # Ensure at least one gateway is always available during
+  # voluntary disruptions (node drain, cluster-autoscaler scale-down,
+  # rolling restart). With replicas: 2, this lets one pod be evicted
+  # but blocks the second until the first is replaced.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: open-serve-gateway
+{{- end }}

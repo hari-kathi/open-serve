@@ -1,0 +1,79 @@
+{{- if .Values.probe.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-serve-probe
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app: open-serve-probe
+    app.kubernetes.io/component: probe
+spec:
+  replicas: {{ .Values.probe.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: open-serve-probe
+  template:
+    metadata:
+      labels:
+        app: open-serve-probe
+        app.kubernetes.io/component: probe
+      annotations:
+        # Force rollout on config changes
+        checksum/config: {{ include (print $.Template.BasePath "/probe-configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: probe
+          image: {{ .Values.probe.image.registry | default "ghcr.io" }}/{{ .Values.probe.image.repository }}:{{ .Values.probe.image.tag }}
+          imagePullPolicy: {{ .Values.probe.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: 8000
+              name: http
+              protocol: TCP
+          env:
+            - name: PROBE_CONFIG_FILE
+              value: "/config/targets.yaml"
+            {{- if .Values.gateway.enabled }}
+            - name: API_KEY_MAP_FILE
+              value: "/secrets/key-map.json"
+            {{- end }}
+          volumeMounts:
+            - name: targets
+              mountPath: /config
+              readOnly: true
+            {{- if .Values.gateway.enabled }}
+            - name: api-keys
+              mountPath: /secrets
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.probe.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: targets
+          configMap:
+            name: open-serve-probe-config
+            items:
+              - key: targets.yaml
+                path: targets.yaml
+        {{- if .Values.gateway.enabled }}
+        - name: api-keys
+          secret:
+            secretName: {{ .Values.gateway.apiKeySecret.name | default "open-serve-api-keys" }}
+            items:
+              - key: {{ .Values.gateway.apiKeySecret.key | default "key-map.json" }}
+                path: key-map.json
+        {{- end }}
+{{- end }}

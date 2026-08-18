@@ -1,0 +1,9 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: open-serve
+  namespace: open-serve
+spec:
+  valuesFrom:
+    - kind: ConfigMap
+      name: open-serve-values

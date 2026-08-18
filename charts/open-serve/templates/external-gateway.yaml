@@ -1,0 +1,70 @@
+{{- if and .Values.gateway.enabled .Values.externalGateway.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: open-serve-gateway-ext
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app.kubernetes.io/component: external-gateway
+  {{- if .Values.externalGateway.certMap }}
+  annotations:
+    networking.gke.io/certmap: {{ .Values.externalGateway.certMap | quote }}
+  {{- end }}
+spec:
+  # Any Gateway API implementation works — set externalGateway.className to
+  # your controller's GatewayClass (Istio, Envoy Gateway, NGINX Gateway
+  # Fabric, etc.). The default targets GKE's global external managed LB.
+  gatewayClassName: {{ .Values.externalGateway.className | default "gke-l7-global-external-managed" | quote }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: Same
+  {{- if .Values.externalGateway.addressName }}
+  addresses:
+    - type: NamedAddress
+      value: {{ .Values.externalGateway.addressName | quote }}
+  {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: open-serve-routes
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app.kubernetes.io/component: external-gateway
+spec:
+  parentRefs:
+    - name: open-serve-gateway-ext
+  hostnames:
+    - {{ .Values.externalGateway.hostname | default "models.example.com" | quote }}
+  # Note: HTTPRoute `timeouts` are unsupported on gke-l7-global-external-managed
+  # (GWCER104). On GKE, backend service timeout is set via GCPBackendPolicy below.
+  rules:
+    - backendRefs:
+        - name: open-serve-gateway
+          port: 8000
+{{- if .Values.externalGateway.gcpBackendPolicy.enabled }}
+---
+# GKE only. Overrides the GCP external Application Load Balancer's default
+# 30s backend service timeout, which would otherwise cut streaming inference
+# responses off at 30 seconds with HTTP 504.
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: open-serve-gateway-backend-policy
+  labels:
+    {{- include "open-serve.labels" . | nindent 4 }}
+    app.kubernetes.io/component: external-gateway
+spec:
+  default:
+    timeoutSec: {{ int (.Values.externalGateway.gcpBackendPolicy.timeoutSec | default 600) }}
+  targetRef:
+    group: ""
+    kind: Service
+    name: open-serve-gateway
+{{- end }}
+{{- end }}
