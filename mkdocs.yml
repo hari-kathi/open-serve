@@ -1,0 +1,68 @@
+site_name: open-serve
+site_description: >-
+  An open, batteries-included model-serving framework for Kubernetes,
+  built on Ray Serve, Ray Serve LLM, and vLLM.
+repo_url: https://github.com/hari-kathi/open-serve
+repo_name: hari-kathi/open-serve
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Quickstart:
+      - Local demo on kind: quickstart/kind.md
+      - End-to-end on GCP: quickstart/gcp.md
+  - Concepts:
+      - Architecture: concepts/architecture.md
+      - Runners: concepts/runners.md
+      - Model catalog: concepts/model-catalog.md
+  - Operations:
+      - Adding a model: operations/adding-a-model.md
+      - API keys: operations/api-keys.md
+      - Observability: operations/observability.md
+      - Cost: operations/cost.md
+  - Reference:
+      - API reference: reference/api.md

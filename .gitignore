@@ -22,6 +22,9 @@ charts/**/charts/
 !*.auto.tfvars.example
 .terraform.lock.hcl
 
+# Docs
+site/
+
 # Editors
 .idea/
 .vscode/

@@ -61,11 +61,41 @@ jobs:
         run: |
           if [ -d tests ]; then pytest -q; else echo "no tests yet"; fi
 
+  vllm-runtime-tests:
+    name: vllm runtime tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r runtimes/vllm/requirements-dev.txt ruff
+      - run: ruff check runtimes/vllm
+      - run: pytest -q runtimes/vllm/tests
+
   helm:
-    name: helm lint
+    name: helm lint + catalog
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
       - run: helm lint charts/open-serve
       - run: helm template smoke charts/open-serve > /dev/null
+      - name: Values schema rejects invalid input
+        run: |
+          if helm template smoke charts/open-serve --set serveModels.x.type=bogus > /dev/null 2>&1; then
+            echo "values.schema.json failed to reject an invalid runner type"; exit 1
+          fi
+      - name: Validate catalog presets
+        run: scripts/validate-catalog.sh
+
+  docs:
+    name: docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install 'mkdocs-material~=9.0'
+      - run: mkdocs build --strict
