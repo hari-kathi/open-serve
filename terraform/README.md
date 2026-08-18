@@ -2,13 +2,15 @@
 
 Terraform modules for standing up the underlying infrastructure. **Bring-your-own-cluster is a first-class path** — you only need these if you want a turnkey environment.
 
-Planned layout:
+Layout:
 
 ```
 terraform/gcp/
-  bootstrap/   # project, APIs, minimal service accounts, state bucket
-  network/     # VPC, subnets, Cloud NAT
-  cluster/     # GKE + GPU node pools (scale-to-zero, multi-SKU tiering)
+  bootstrap/   # enable APIs on an existing project, optional state + model buckets
+  network/     # VPC, GKE-ready subnet, Cloud NAT
+  cluster/     # GKE + GPU node pools (scale-to-zero, spot, multi-SKU via a pool map)
 ```
 
-Status: extraction and generalization in progress (pool map refactor, spot support, budget alerts). AWS and Azure follow after GCP.
+See [`gcp/README.md`](gcp/README.md) for module inputs and
+[`examples/gcp-quickstart/`](../examples/gcp-quickstart/) for a wired-up root module.
+AWS and Azure follow after GCP.

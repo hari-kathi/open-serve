@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars and edit.
+project_id = "open-serve"
+region     = "us-central1"
