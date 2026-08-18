@@ -1,0 +1,170 @@
+# open-serve values for a local kind e2e run on an Apple Silicon (arm64) Mac.
+#
+# Deploys:
+#   - one CPU-only `custom`-runner model ("echo") as a RayService, using the
+#     upstream arm64 Ray image and an inline serveScript (FastAPI ingress that
+#     speaks a minimal OpenAI surface: GET /v1/models + POST /v1/chat/completions)
+#   - the gateway in front of it (API-key auth + model-based routing)
+#
+# Everything else (probe, status page, external gateway, monitoring) is off so
+# the chart installs on a bare kind cluster with only the KubeRay operator.
+
+# Global Ray image: upstream arm64 build. On amd64 hosts use tag "2.53.0-py311".
+image:
+  registry: docker.io
+  repository: rayproject/ray
+  tag: "2.53.0-py311-aarch64"
+
+# run.sh creates this ServiceAccount (the chart requires it to pre-exist).
+serviceAccount:
+  name: "open-serve-worker"
+
+# No kube-prometheus-stack on the kind cluster -> no PodMonitor/PrometheusRule
+# CRDs. Chart must render zero monitoring resources with this off.
+monitoring:
+  enabled: false
+
+probe:
+  enabled: false
+
+statusPage:
+  enabled: false
+
+externalGateway:
+  enabled: false
+
+gateway:
+  enabled: true
+  image:
+    # `kind load docker-image open-serve-gateway:dev` stores the image on the
+    # node as docker.io/library/open-serve-gateway:dev; IfNotPresent + an
+    # exact (non-latest) tag makes containerd use it without a registry pull.
+    registry: docker.io
+    repository: library/open-serve-gateway
+    tag: "dev"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+  # run.sh generates a throwaway key and creates this Secret before install.
+  apiKeySecret:
+    name: "open-serve-api-keys"
+    key: "key-map.json"
+  # Route by model name (chat/completions body `model: echo`) instead of by
+  # path prefix: an empty `backends` list disables path-prefix routing so the
+  # modelRoutes table is actually exercised. defaultBackendUrl covers
+  # everything else and is also what the gateway's /healthz readiness checks.
+  defaultBackendUrl: "http://rayservice-echo-serve-svc:8000"
+  backends: []
+  modelRoutes:
+    echo:
+      service: rayservice-echo-serve-svc
+      port: 8000
+
+serveModels:
+  echo:
+    enabled: true
+    type: custom
+    tier: internal-test
+    runner: chat
+    category: Model
+    description: "CPU-only echo model for local e2e validation"
+    rayVersion: "2.53.0"
+    routePrefix: "/"
+    # Module below is injected as /app/serve-scripts/serve_echo.py (PYTHONPATH).
+    importPath: "serve_echo:app"
+    replicas:
+      min: 1
+      max: 1
+      workerMin: 1
+      workerMax: 1
+    autoscaling:
+      targetOngoingRequests: 5
+      downscaleDelayS: 60
+      upscaleDelayS: 30
+    # CPU-only model: no accelerator resources, tolerations, or nodeSelector
+    # should render.
+    gpu:
+      count: 0
+    resources:
+      head:
+        requests: { cpu: "1", memory: "2Gi" }
+        limits: { cpu: "2", memory: "3Gi" }
+      worker:
+        requests: { cpu: "500m", memory: "1Gi" }
+        limits: { cpu: "1", memory: "2Gi" }
+    serveScript: |
+      """Tiny CPU-only Ray Serve app for the open-serve kind e2e example.
+
+      FastAPI ingress exposing a minimal OpenAI-compatible surface:
+        GET  /v1/models           -> lists model id "echo"
+        POST /v1/chat/completions -> canned completion echoing the last
+                                     user message
+      """
+      import time
+      import uuid
+
+      from fastapi import FastAPI, Request
+      from ray import serve
+
+      fastapi_app = FastAPI()
+
+      MODEL_ID = "echo"
+
+
+      # Deployment name must match the chart's serveConfigV2 `deployments:`
+      # entry for type=custom models: "<model-name>-model".
+      @serve.deployment(name="echo-model")
+      @serve.ingress(fastapi_app)
+      class EchoModel:
+          @fastapi_app.get("/v1/models")
+          async def list_models(self) -> dict:
+              return {
+                  "object": "list",
+                  "data": [
+                      {
+                          "id": MODEL_ID,
+                          "object": "model",
+                          "created": 0,
+                          "owned_by": "open-serve",
+                      }
+                  ],
+              }
+
+          @fastapi_app.post("/v1/chat/completions")
+          async def chat_completions(self, request: Request) -> dict:
+              body = await request.json()
+              last_user = ""
+              for message in reversed(body.get("messages", [])):
+                  if message.get("role") == "user":
+                      last_user = message.get("content", "")
+                      break
+              return {
+                  "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                  "object": "chat.completion",
+                  "created": int(time.time()),
+                  "model": body.get("model", MODEL_ID),
+                  "choices": [
+                      {
+                          "index": 0,
+                          "message": {
+                              "role": "assistant",
+                              "content": f"echo: {last_user}",
+                          },
+                          "finish_reason": "stop",
+                      }
+                  ],
+                  "usage": {
+                      "prompt_tokens": 0,
+                      "completion_tokens": 0,
+                      "total_tokens": 0,
+                  },
+              }
+
+
+      app = EchoModel.bind()
