@@ -1,0 +1,376 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "open-serve chart values",
+  "description": "Helm values schema for the open-serve chart. Deliberately permissive where the templates are flexible: known fields are type-checked, unknown fields are allowed so overlays and forward-compatible additions never fail validation.",
+  "type": "object",
+  "additionalProperties": true,
+  "definitions": {
+    "cpuOrMemory": {
+      "description": "Kubernetes resource quantity — string ('2', '500m', '8Gi') or bare number.",
+      "type": ["string", "number"]
+    },
+    "resourceList": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "cpu": { "$ref": "#/definitions/cpuOrMemory" },
+        "memory": { "$ref": "#/definitions/cpuOrMemory" }
+      }
+    },
+    "resourcesBlock": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "requests": { "$ref": "#/definitions/resourceList" },
+        "limits": { "$ref": "#/definitions/resourceList" }
+      }
+    },
+    "imageBlock": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "registry": { "type": "string" },
+        "repository": { "type": "string" },
+        "tag": { "type": ["string", "number"] },
+        "pullPolicy": { "type": "string" }
+      }
+    },
+    "modelEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "type": {
+          "description": "Serving pattern. Defaults to 'custom' when unset.",
+          "type": "string",
+          "enum": ["ray-serve-llm", "vllm-raw", "custom"]
+        },
+        "tier": {
+          "description": "Only tier=production models are probed. Defaults to 'internal-test' when unset.",
+          "type": "string",
+          "enum": ["production", "internal-test"]
+        },
+        "runner": {
+          "description": "Open-ended probe/runner hint. Built-ins: 'chat', 'embedding'; any other string gets the generic liveness probe.",
+          "type": "string"
+        },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "modelId": { "type": "string" },
+        "vllmArgs": {
+          "description": "vLLM CLI flags as snake_case keys (type: vllm-raw). Free-form: any vLLM flag passes through.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "serveScript": { "type": "string" },
+        "serveScriptFile": { "type": "string" },
+        "serveScriptFilename": { "type": "string" },
+        "importPath": { "type": "string" },
+        "replicas": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "type": "integer", "minimum": 0 },
+            "workerMin": { "type": "integer", "minimum": 0 },
+            "workerMax": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "targetOngoingRequests": { "type": "number" },
+            "downscaleDelayS": { "type": "number" },
+            "upscaleDelayS": { "type": "number" }
+          }
+        },
+        "gpu": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "count": {
+              "description": "Per-replica Ray GPU fraction (Serve ray_actor_options.num_gpus). May be fractional, e.g. 0.25.",
+              "type": "number",
+              "minimum": 0
+            },
+            "workerGpus": {
+              "description": "GPUs the Ray worker pod advertises. Defaults to ceil(count).",
+              "type": "number",
+              "minimum": 0
+            },
+            "kubernetesGpu": {
+              "description": "Override for the pod nvidia.com/gpu request/limit.",
+              "type": ["string", "number"]
+            },
+            "acceleratorType": { "type": "string" },
+            "nodeSelector": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "head": { "$ref": "#/definitions/resourcesBlock" },
+            "worker": { "$ref": "#/definitions/resourcesBlock" }
+          }
+        },
+        "env": {
+          "description": "Extra container env entries (Kubernetes EnvVar objects).",
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "extraVolumes": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "extraVolumeMounts": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "sharedMemorySize": { "type": "string" },
+        "routePrefix": { "type": "string" },
+        "rayVersion": { "type": ["string", "number"] },
+        "image": { "$ref": "#/definitions/imageBlock" },
+        "podAnnotations": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "chatTemplate": { "type": "string" },
+        "userConfig": { "type": "object", "additionalProperties": true },
+        "modelWeightsGcsUri": { "type": "string" },
+        "grafana": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "iframeHost": { "type": "string" },
+            "host": { "type": "string" },
+            "prometheusHost": { "type": "string" }
+          }
+        },
+        "model": {
+          "description": "Legacy ray-serve-llm field (model spec consumed by injected serve scripts)."
+        },
+        "modelLoadingConfig": {
+          "description": "Legacy ray-serve-llm field.",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "engine": {
+          "description": "Legacy ray-serve-llm field (engine kwargs).",
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  },
+  "properties": {
+    "image": { "$ref": "#/definitions/imageBlock" },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" }
+      }
+    },
+    "workerReadinessProbe": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "rayClusterChecksum": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "dashboards": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": { "enabled": { "type": "boolean" } }
+        },
+        "alerts": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "vllm": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": { "enabled": { "type": "boolean" } }
+            },
+            "latency": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "rayServeP95Ms": { "type": "number" },
+                "ttftP95Seconds": { "type": "number" },
+                "tpotP95Seconds": { "type": "number" },
+                "e2eP95Seconds": { "type": "number" }
+              }
+            },
+            "availability": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "errorRateThreshold": { "type": "number" },
+                "replicaRestartsThreshold": { "type": "number" }
+              }
+            },
+            "saturation": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "gpuMemoryWarning": { "type": "number" },
+                "gpuMemoryCritical": { "type": "number" },
+                "queueDepthThreshold": { "type": "number" },
+                "queuedQueriesThreshold": { "type": "number" }
+              }
+            },
+            "probes": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": {
+                  "description": "Boolean, or '' to default to probe.enabled.",
+                  "type": ["boolean", "string"]
+                },
+                "slo": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "perModel": {
+                      "type": "object",
+                      "additionalProperties": { "type": "number" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/imageBlock" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resourcesBlock" },
+        "apiKeySecret": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "name": { "type": "string" },
+            "key": { "type": "string" }
+          }
+        },
+        "defaultBackendUrl": { "type": "string" },
+        "backends": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "pathPrefix": { "type": "string" },
+              "service": { "type": "string" },
+              "port": { "type": "integer" }
+            }
+          }
+        },
+        "modelRoutes": {
+          "description": "Map of model id -> backend service, for model-name-based routing.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "service": { "type": "string" },
+              "port": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/imageBlock" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resourcesBlock" },
+        "intervalSeconds": { "type": "number" },
+        "defaultTimeoutSeconds": { "type": "number" },
+        "authSourceName": { "type": "string" }
+      }
+    },
+    "statusPage": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": { "$ref": "#/definitions/imageBlock" },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": { "$ref": "#/definitions/resourcesBlock" },
+        "prometheusUrl": { "type": "string" },
+        "cacheTtlSeconds": { "type": "number" },
+        "stripDays": { "type": "number" },
+        "recentHistoryDays": { "type": "number" },
+        "incidentMinConsecutiveSamples": { "type": "number" },
+        "probeIntervalSeconds": { "type": "number" },
+        "defaultLatencySloS": { "type": "number" },
+        "categoryOrder": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "branding": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "title": { "type": "string" },
+            "logoUrl": { "type": "string" },
+            "footerLinkText": { "type": "string" },
+            "footerLinkUrl": { "type": "string" }
+          }
+        }
+      }
+    },
+    "externalGateway": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "hostname": { "type": "string" },
+        "addressName": { "type": "string" },
+        "certMap": { "type": "string" },
+        "gcpBackendPolicy": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "timeoutSec": { "type": "number" }
+          }
+        }
+      }
+    },
+    "serveModels": {
+      "description": "Map of model name -> model entry. Each enabled entry renders an independent RayService.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/modelEntry" }
+    }
+  }
+}

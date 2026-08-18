@@ -1,0 +1,61 @@
+# Catalog preset: mxbai-embed-large-v1 (embedding)
+#
+# mixedbread-ai/mxbai-embed-large-v1 — 335M-parameter BERT-class English
+# text-embedding model (1024-dim vectors, strong MTEB retrieval scores,
+# supports Matryoshka truncation). License: Apache-2.0. Context length:
+# 512 tokens.
+#
+# Served via vllm-raw with vLLM's pooling runner (`runner: pooling` under
+# vllmArgs — the successor to the older `task: embed` flag), which exposes
+# /v1/embeddings and /pooling. Routing note: the gateway routes by path
+# prefix, so give this model its own prefix (e.g. /embed) in
+# gateway.backends pointing at rayservice-mxbai-embed-large-v1-serve-svc,
+# and clients call <prefix>/v1/embeddings.
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   L4-24GB       1     1   512            default below; ample headroom
+#   T4-16GB       1     1   512            set dtype: "float16" (no bf16 on Turing)
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+mxbai-embed-large-v1:
+  enabled: false
+  modelId: "mixedbread-ai/mxbai-embed-large-v1"
+  tier: production
+  # Top-level runner is open-serve probe metadata (probes /v1/embeddings);
+  # distinct from vllmArgs.runner, which is the vLLM engine-runner flag.
+  runner: embedding
+  category: Embedding
+  description: "mxbai-embed-large-v1 English text-embedding model (1024-dim)"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  vllmArgs:
+    model: "mixedbread-ai/mxbai-embed-large-v1"
+    served_model_name: "mixedbread-ai/mxbai-embed-large-v1"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub
+    #   - model_source: "gs://<your-model-bucket>/models/mixedbread-ai/mxbai-embed-large-v1"
+    #   - model_source: "s3://<your-model-bucket>/models/mixedbread-ai/mxbai-embed-large-v1"
+    # vLLM pooling runner — serves embeddings instead of generation.
+    runner: "pooling"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 512
+    max_num_seqs: 128
+    gpu_memory_utilization: 0.90
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 16
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "L4"
+  resources:
+    worker:
+      requests: { cpu: "4", memory: "16Gi" }
+      limits: { cpu: "6", memory: "24Gi" }

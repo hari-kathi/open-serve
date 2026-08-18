@@ -1,0 +1,69 @@
+# Catalog preset: gemma-3-27b-it (chat, multimodal-capable)
+#
+# Google Gemma 3 27B IT — instruction-tuned chat model (also accepts image
+# input via its SigLIP vision tower, though this preset is sized/probed as a
+# text chat model). License: Gemma Terms of Use (not OSI open source; review
+# the prohibited-use policy). Context length: 131,072 tokens (sized to
+# 32,768 below). The HF repo is GATED — accept the Gemma terms on Hugging
+# Face and provide an HF token via env (see the commented env block below),
+# or pre-stage weights via model_source.
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   A100-80GB     1     1   32768          default below (~54 GB bf16 weights)
+#   A100-40GB     2     2   16384          set tensor_parallel_size: 2, gpu.count: 2
+#   H100-80GB     1     1   32768          drop enforce_eager (see below)
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+gemma-3-27b-it:
+  enabled: false
+  modelId: "google/gemma-3-27b-it"
+  tier: production
+  runner: chat
+  category: LLM
+  description: "Google Gemma 3 27B instruction-tuned chat model"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  sharedMemorySize: "20Gi"
+  vllmArgs:
+    model: "google/gemma-3-27b-it"
+    served_model_name: "google/gemma-3-27b-it"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub (HF token
+    #     required — gated repo)
+    #   - model_source: "gs://<your-model-bucket>/models/google/gemma-3-27b-it"
+    #   - model_source: "s3://<your-model-bucket>/models/google/gemma-3-27b-it"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 32768
+    max_num_seqs: 16
+    gpu_memory_utilization: 0.90
+    # A100 (compute capability 8.0) workaround: Gemma-class CUDA graph
+    # capture hits unsupported fp8 Triton kernels / CUDA-graph asserts on
+    # SM 8.0. enforce_eager disables graph capture at some throughput cost.
+    # Drop this flag on Hopper (H100/H200) and newer.
+    enforce_eager: true
+    # No tool_call_parser: Gemma 3 has no dedicated vLLM tool parser;
+    # tool use works via prompt-level function calling only.
+  # Required for pulling gated weights from the Hub (skip when using
+  # model_source with pre-staged weights):
+  # env:
+  #   - name: HF_TOKEN
+  #     valueFrom:
+  #       secretKeyRef: { name: hf-token, key: token }
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 5
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "A100"
+  resources:
+    worker:
+      requests: { cpu: "8", memory: "48Gi" }
+      limits: { cpu: "12", memory: "64Gi" }

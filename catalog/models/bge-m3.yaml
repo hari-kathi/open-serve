@@ -1,0 +1,62 @@
+# Catalog preset: bge-m3 (embedding)
+#
+# BAAI/bge-m3 — multilingual (100+ languages) XLM-RoBERTa-class embedding
+# model; "M3" = multi-lingual, multi-function (dense / sparse / ColBERT-style
+# multi-vector — vLLM serves the dense 1024-dim vectors), multi-granularity.
+# License: MIT. Context length: 8,192 tokens — well suited to long-passage
+# retrieval.
+#
+# Served via vllm-raw with vLLM's pooling runner (`runner: pooling` under
+# vllmArgs — the successor to the older `task: embed` flag), which exposes
+# /v1/embeddings and /pooling. Routing note: the gateway routes by path
+# prefix, so give this model its own prefix (e.g. /embed) in
+# gateway.backends pointing at rayservice-bge-m3-serve-svc, and clients
+# call <prefix>/v1/embeddings.
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   L4-24GB       1     1   8192           default below
+#   T4-16GB       1     1   8192           set dtype: "float16" (no bf16 on Turing)
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+bge-m3:
+  enabled: false
+  modelId: "BAAI/bge-m3"
+  tier: production
+  # Top-level runner is open-serve probe metadata (probes /v1/embeddings);
+  # distinct from vllmArgs.runner, which is the vLLM engine-runner flag.
+  runner: embedding
+  category: Embedding
+  description: "BGE-M3 multilingual long-context text-embedding model"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  vllmArgs:
+    model: "BAAI/bge-m3"
+    served_model_name: "BAAI/bge-m3"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub
+    #   - model_source: "gs://<your-model-bucket>/models/BAAI/bge-m3"
+    #   - model_source: "s3://<your-model-bucket>/models/BAAI/bge-m3"
+    # vLLM pooling runner — serves embeddings instead of generation.
+    runner: "pooling"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 8192
+    max_num_seqs: 64
+    gpu_memory_utilization: 0.90
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 16
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "L4"
+  resources:
+    worker:
+      requests: { cpu: "4", memory: "16Gi" }
+      limits: { cpu: "6", memory: "24Gi" }

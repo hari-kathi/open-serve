@@ -1,0 +1,64 @@
+# Catalog preset: llama-3-3-70b-instruct (chat, tool calling)
+#
+# Meta Llama 3.3 70B Instruct — flagship open-weights instruction-tuned chat
+# model. License: Llama 3.3 Community License (not OSI open source; review
+# the acceptable-use policy). Context length: 131,072 tokens (sized to 8,192
+# below — bf16 weights are ~140 GB, so KV headroom on 160 GB of total VRAM is
+# thin). The HF repo is GATED — accept the license on Hugging Face and provide
+# an HF token via env (see the commented env block below), or pre-stage
+# weights via model_source.
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   A100-40GB     4     4   8192           default below; tight — small batch
+#   A100-80GB     2     2   8192           set tensor_parallel_size: 2, gpu.count: 2
+#   A100-80GB     4     4   131072         comfortable long-context footprint
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+llama-3-3-70b-instruct:
+  enabled: false
+  modelId: "meta-llama/Llama-3.3-70B-Instruct"
+  tier: production
+  runner: chat
+  category: LLM
+  description: "Meta Llama 3.3 70B Instruct flagship chat model"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  sharedMemorySize: "32Gi"
+  vllmArgs:
+    model: "meta-llama/Llama-3.3-70B-Instruct"
+    served_model_name: "meta-llama/Llama-3.3-70B-Instruct"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub (HF token
+    #     required — gated repo)
+    #   - model_source: "gs://<your-model-bucket>/models/meta-llama/Llama-3.3-70B-Instruct"
+    #   - model_source: "s3://<your-model-bucket>/models/meta-llama/Llama-3.3-70B-Instruct"
+    tensor_parallel_size: 4
+    dtype: "bfloat16"
+    max_model_len: 8192
+    max_num_seqs: 8
+    gpu_memory_utilization: 0.90
+    enable_auto_tool_choice: true
+    tool_call_parser: "llama3_json"
+  # Required for pulling gated weights from the Hub (skip when using
+  # model_source with pre-staged weights):
+  # env:
+  #   - name: HF_TOKEN
+  #     valueFrom:
+  #       secretKeyRef: { name: hf-token, key: token }
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 5
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 4
+    acceleratorType: "A100"
+  resources:
+    worker:
+      requests: { cpu: "16", memory: "96Gi" }
+      limits: { cpu: "24", memory: "128Gi" }

@@ -204,13 +204,18 @@ spec:
         replicas: {{ $workerMin }}
         minReplicas: {{ $workerMin }}
         maxReplicas: {{ $workerMax }}
+        {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
         rayStartParams:
-          {{- if and $model.gpu (gt ($model.gpu.count | default 0 | float64) 0.0) }}
           num-gpus: {{ $workerGpusRay | quote }}
           {{- if $model.gpu.acceleratorType }}
           resources: '"{\"accelerator_type:{{ $model.gpu.acceleratorType }}\": 9999}"'
           {{- end }}
-          {{- end }}
+        {{- else }}
+        # GPU-less worker group: emit an empty map (not null) — the KubeRay CRD
+        # requires rayStartParams to be an object, and Helm's server-side apply
+        # rejects an explicit null here.
+        rayStartParams: {}
+        {{- end }}
         template:
           metadata:
             {{- if or $.Values.rayClusterChecksum.enabled $model.podAnnotations }}

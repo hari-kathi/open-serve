@@ -1,0 +1,59 @@
+# Catalog preset: qwen3-vl-8b-instruct (vision-language chat, tool calling)
+#
+# Qwen3-VL-8B-Instruct — vision-language model: image + text in, text out
+# (OCR, chart/document understanding, visual QA, grounding). License:
+# Apache-2.0. Context length: up to 262,144 tokens native (sized to 32,768
+# below — image embeddings consume context quickly).
+#
+# Requests use the OpenAI chat completions API with image_url content parts;
+# per-request image count is capped by limit_mm_per_prompt below.
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   A100-40GB     1     1   32768          default below
+#   A100-80GB     1     1   131072         long-context / many-image workloads
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+qwen3-vl-8b-instruct:
+  enabled: false
+  modelId: "Qwen/Qwen3-VL-8B-Instruct"
+  tier: production
+  runner: chat
+  category: Vision-Language
+  description: "Qwen3-VL 8B Instruct vision-language model (image + text chat)"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  sharedMemorySize: "20Gi"
+  vllmArgs:
+    model: "Qwen/Qwen3-VL-8B-Instruct"
+    served_model_name: "Qwen/Qwen3-VL-8B-Instruct"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub
+    #   - model_source: "gs://<your-model-bucket>/models/Qwen/Qwen3-VL-8B-Instruct"
+    #   - model_source: "s3://<your-model-bucket>/models/Qwen/Qwen3-VL-8B-Instruct"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 32768
+    max_num_seqs: 16
+    gpu_memory_utilization: 0.90
+    # Dict-valued vLLM flags must be JSON strings (vLLM parses with
+    # json.loads). Caps images per request; raise for multi-page documents.
+    limit_mm_per_prompt: '{"image": 4}'
+    enable_auto_tool_choice: true
+    tool_call_parser: "hermes"
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 5
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "A100"
+  resources:
+    worker:
+      requests: { cpu: "8", memory: "32Gi" }
+      limits: { cpu: "8", memory: "48Gi" }

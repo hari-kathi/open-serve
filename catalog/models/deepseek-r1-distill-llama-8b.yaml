@@ -1,0 +1,56 @@
+# Catalog preset: deepseek-r1-distill-llama-8b (chat, reasoning)
+#
+# DeepSeek-R1-Distill-Llama-8B — R1 reasoning traces distilled into a
+# Llama-3.1-8B base. Emits <think>...</think> chains before the final
+# answer. License: MIT for the distilled weights (the Llama 3.1 Community
+# License also applies to the base model). Context length: 131,072 tokens
+# (sized to 32,768 below; leave generous max_tokens headroom — reasoning
+# chains are long).
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   A100-40GB     1     1   32768          default below
+#   L4-24GB       1     1   8192           reduce max_model_len + max_num_seqs
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+deepseek-r1-distill-llama-8b:
+  enabled: false
+  modelId: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+  tier: production
+  runner: chat
+  category: LLM
+  description: "DeepSeek-R1 reasoning distill of Llama 3.1 8B"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  sharedMemorySize: "16Gi"
+  vllmArgs:
+    model: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    served_model_name: "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub
+    #   - model_source: "gs://<your-model-bucket>/models/deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    #   - model_source: "s3://<your-model-bucket>/models/deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 32768
+    max_num_seqs: 32
+    gpu_memory_utilization: 0.90
+    # Splits <think>...</think> content into the response's reasoning field.
+    reasoning_parser: "deepseek_r1"
+    # No tool_call_parser: R1 distills are not tuned for function calling.
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 5
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "A100"
+  resources:
+    worker:
+      requests: { cpu: "8", memory: "32Gi" }
+      limits: { cpu: "8", memory: "48Gi" }

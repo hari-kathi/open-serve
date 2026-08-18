@@ -1,0 +1,54 @@
+# Catalog preset: qwen3-32b (chat, tool calling, hybrid reasoning)
+#
+# Qwen3-32B — strong mid-size chat model with hybrid thinking/non-thinking
+# modes. License: Apache-2.0. Context length: 32,768 tokens native
+# (131,072 with YaRN rope scaling).
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   A100-80GB     1     1   32768          default below (~65 GB bf16 weights)
+#   A100-40GB     2     2   32768          set tensor_parallel_size: 2, gpu.count: 2
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+qwen3-32b:
+  enabled: false
+  modelId: "Qwen/Qwen3-32B"
+  tier: production
+  runner: chat
+  category: LLM
+  description: "Qwen3 32B chat model with hybrid reasoning"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  sharedMemorySize: "20Gi"
+  vllmArgs:
+    model: "Qwen/Qwen3-32B"
+    served_model_name: "Qwen/Qwen3-32B"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub
+    #   - model_source: "gs://<your-model-bucket>/models/Qwen/Qwen3-32B"
+    #   - model_source: "s3://<your-model-bucket>/models/Qwen/Qwen3-32B"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 32768
+    max_num_seqs: 16
+    gpu_memory_utilization: 0.90
+    enable_auto_tool_choice: true
+    tool_call_parser: "hermes"
+    # Splits <think>...</think> content into the response's reasoning field.
+    reasoning_parser: "qwen3"
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 5
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "A100"
+  resources:
+    worker:
+      requests: { cpu: "8", memory: "48Gi" }
+      limits: { cpu: "12", memory: "64Gi" }

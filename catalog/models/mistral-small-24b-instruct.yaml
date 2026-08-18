@@ -1,0 +1,61 @@
+# Catalog preset: mistral-small-24b-instruct (chat, tool calling)
+#
+# Mistral Small 3 (24B) Instruct — latency-optimized mid-size chat model
+# (mistralai/Mistral-Small-24B-Instruct-2501). License: Apache-2.0.
+# Context length: 32,768 tokens.
+#
+# Tokenizer note: Mistral models are best served with vLLM's mistral
+# tokenizer mode (uses mistral-common instead of the HF tokenizer — required
+# for correct tool-call token handling). config_format/load_format mistral
+# load the official consolidated checkpoint format; drop those two flags if
+# serving a HF-format copy of the weights.
+#
+# GPU sizing (indicative — validate for your accelerator/quota):
+#   accelerator   gpus  tp  max_model_len  notes
+#   A100-80GB     1     1   32768          default below (~47 GB bf16 weights)
+#   A100-40GB     2     2   32768          set tensor_parallel_size: 2, gpu.count: 2
+#
+# Merge under `serveModels:` in your environment values, then set enabled: true.
+mistral-small-24b-instruct:
+  enabled: false
+  modelId: "mistralai/Mistral-Small-24B-Instruct-2501"
+  tier: production
+  runner: chat
+  category: LLM
+  description: "Mistral Small 3 (24B) latency-optimized chat model"
+  type: vllm-raw
+  rayVersion: "2.55.1"
+  image:
+    repository: "hari-kathi/open-serve-vllm"
+    tag: "0.1.0"
+  routePrefix: "/"
+  sharedMemorySize: "20Gi"
+  vllmArgs:
+    model: "mistralai/Mistral-Small-24B-Instruct-2501"
+    served_model_name: "mistralai/Mistral-Small-24B-Instruct-2501"
+    # model_source options:
+    #   - leave `model` above as the HF id to pull from the Hub
+    #   - model_source: "gs://<your-model-bucket>/models/mistralai/Mistral-Small-24B-Instruct-2501"
+    #   - model_source: "s3://<your-model-bucket>/models/mistralai/Mistral-Small-24B-Instruct-2501"
+    tensor_parallel_size: 1
+    dtype: "bfloat16"
+    max_model_len: 32768
+    max_num_seqs: 16
+    gpu_memory_utilization: 0.90
+    tokenizer_mode: "mistral"
+    config_format: "mistral"
+    load_format: "mistral"
+    enable_auto_tool_choice: true
+    tool_call_parser: "mistral"
+  replicas: { min: 0, max: 1 }
+  autoscaling:
+    targetOngoingRequests: 5
+    downscaleDelayS: 600
+    upscaleDelayS: 60
+  gpu:
+    count: 1
+    acceleratorType: "A100"
+  resources:
+    worker:
+      requests: { cpu: "8", memory: "48Gi" }
+      limits: { cpu: "12", memory: "64Gi" }
