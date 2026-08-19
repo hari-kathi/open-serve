@@ -37,6 +37,11 @@ module "cluster" {
 
   gpu_pools = {
     # Spot L4: cheap single-GPU serving; pods must tolerate preemption.
+    # node_locations restricts the pool to zones where the accelerator exists —
+    # a regional cluster otherwise spreads pools over ALL zones and pool
+    # creation fails in any zone missing the GPU (L4 is absent from
+    # us-central1-f, for example). Check availability for your region with:
+    #   gcloud compute accelerator-types list --filter="zone:<region>"
     gpu-l4-1x = {
       machine_type      = "g2-standard-8"
       accelerator_type  = "nvidia-l4"
@@ -44,6 +49,7 @@ module "cluster" {
       min_nodes         = 0
       max_nodes         = 2
       spot              = true
+      node_locations    = ["us-central1-a", "us-central1-b", "us-central1-c"]
     }
 
     # On-demand A100 40GB for larger models.
