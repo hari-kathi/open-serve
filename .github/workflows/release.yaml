@@ -56,6 +56,11 @@ jobs:
 
       - name: Trivy scan
         uses: aquasecurity/trivy-action@v0.33.1
+        env:
+          # Shared Actions runner IPs are frequently rate-limited pulling the
+          # vulnerability DB from GHCR; fall back to the ECR mirror.
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1,ghcr.io/aquasecurity/trivy-java-db:1
         with:
           image-ref: ghcr.io/hari-kathi/open-serve-${{ matrix.name }}:${{ env.VERSION }}
           format: table
