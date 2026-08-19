@@ -54,19 +54,23 @@ jobs:
           push: false
           tags: ghcr.io/hari-kathi/open-serve-${{ matrix.name }}:${{ env.VERSION }}
 
+      # Direct trivy invocation (the wrapper action failed opaquely). On
+      # findings, re-emit them as ::error:: annotations so they are readable
+      # via the public check-runs API, then fail.
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@v0.33.1
         env:
           # Shared Actions runner IPs are frequently rate-limited pulling the
           # vulnerability DB from GHCR; fall back to the ECR mirror.
           TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2
-          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1,ghcr.io/aquasecurity/trivy-java-db:1
-        with:
-          image-ref: ghcr.io/hari-kathi/open-serve-${{ matrix.name }}:${{ env.VERSION }}
-          format: table
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
+          IMAGE: ghcr.io/hari-kathi/open-serve-${{ matrix.name }}:${{ env.VERSION }}
+        run: |
+          VER=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest | jq -r .tag_name)
+          curl -sSL "https://github.com/aquasecurity/trivy/releases/download/${VER}/trivy_${VER#v}_Linux-64bit.tar.gz" | tar -xz trivy
+          if ! ./trivy image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 "$IMAGE"; then
+            ./trivy image --severity CRITICAL,HIGH --ignore-unfixed --format json --quiet "$IMAGE" \
+              | jq -r '.Results[]? | .Vulnerabilities[]? | "::error::\(.VulnerabilityID) \(.PkgName) \(.InstalledVersion) -> \(.FixedVersion // "none")"'
+            exit 1
+          fi
 
       - name: Push
         uses: docker/build-push-action@v6
