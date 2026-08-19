@@ -57,6 +57,15 @@ gateway:
 - **Flux**: commit and merge to the tracked branch; Flux upgrades the HelmRelease.
 - **Plain Helm**: `helm upgrade open-serve charts/open-serve -n open-serve -f your-values.yaml`
 
+!!! note "Helm v4 server-side apply conflicts with the KubeRay operator"
+    Once a RayService is live, the KubeRay operator takes field ownership of
+    `spec.rayClusterConfig.workerGroupSpecs` (it writes autoscaled replica
+    counts back). Helm v4 upgrades use server-side apply and will fail with a
+    field-manager conflict on existing RayServices — pass `--force-conflicts`
+    (your values remain the source of truth; the operator re-adopts replicas
+    afterwards). Helm v3's client-side strategy and Flux's SSA (which forces
+    by default) are unaffected.
+
 Watch it come up:
 
 ```bash
