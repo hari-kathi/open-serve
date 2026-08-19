@@ -31,9 +31,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Run the gitleaks binary directly (the wrapper action has opaque
+      # failure modes around license checks and push-event commit ranges).
+      - name: Install gitleaks
+        run: |
+          VER=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name)
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/${VER}/gitleaks_${VER#v}_linux_x64.tar.gz" | tar -xz gitleaks
+      - name: Scan full git history
+        run: ./gitleaks detect --source . --redact -v
 
   python-tests:
     name: ${{ matrix.service }} tests
