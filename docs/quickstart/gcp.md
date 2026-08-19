@@ -13,33 +13,43 @@ Go from a fresh GCP project to a GPU-backed, OpenAI-compatible serving endpoint.
 ## Prerequisites
 
 - A GCP account with billing enabled, and `gcloud` authenticated
-- Terraform >= 1.5
+- OpenTofu or Terraform >= 1.5
 - `kubectl`, `helm`, and the [Flux CLI](https://fluxcd.io/flux/installation/)
 - A GitHub (or other Git) repo to act as your GitOps repo
+
+## 0. Preflight
+
+Run the preflight script against your project before anything else. It verifies gcloud auth, project access, and billing; **enables all required Google APIs**; checks for Application Default Credentials; and reports your GPU/CPU/SSD quotas with instructions for anything at zero:
+
+```bash
+scripts/gcp-preflight.sh <PROJECT_ID> [REGION]   # region defaults to us-central1
+```
+
+It is safe to re-run at any time and exits non-zero while action items remain. Two items it cannot fix for you:
+
+- **Credentials for Terraform** — either `gcloud auth application-default login` (persistent), or a short-lived token per shell: `export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)` (expires after ~1 hour; re-export and re-run apply if a long apply outlives it).
+- **GPU quota** — see below.
 
 !!! warning "GPU quota"
     New GCP projects typically have **zero GPU quota**. Request quota for your chosen accelerator (e.g. `NVIDIA_A100_GPUS` or `NVIDIA_L4_GPUS`) in your target region *before* applying the cluster layer — quota requests can take hours to days, and without quota GPU node pools scale up to nothing (pods stay `Pending`, then the OpenServeWorkerPending alert fires).
 
 ## 1. Infrastructure layer (Terraform)
 
-The reference Terraform lives in `examples/gcp-quickstart/` and applies in three stages, in order:
+The reference root in `examples/gcp-quickstart/` wires three modules (from `terraform/gcp/`) into one apply:
 
-| Stage | What it creates |
+| Module | What it creates |
 |---|---|
-| `bootstrap` | The project wiring: enabled APIs, minimal service accounts, Terraform state bucket |
-| `network` | VPC, subnets, Cloud NAT |
-| `cluster` | The GKE cluster plus GPU node pools (scale-to-zero, multi-SKU tiering, optional spot) |
-
-Each stage is a standard Terraform workflow:
+| `bootstrap` | Enabled APIs on the existing project; optional state + model-weights buckets |
+| `network` | VPC, GKE-ready subnet with pods/services secondary ranges, Cloud NAT |
+| `cluster` | The GKE cluster plus GPU node pools (scale-to-zero, spot, data-driven pool map) and the Workload Identity worker service account |
 
 ```bash
-cd examples/gcp-quickstart/<stage>
-terraform init
-terraform plan
-terraform apply
+cd examples/gcp-quickstart
+cp terraform.tfvars.example terraform.tfvars   # edit project_id
+tofu init && tofu apply                        # or terraform
 ```
 
-See `terraform/README.md` and the variables files in each stage for the knobs (project id, region, accelerator SKUs, pool sizing). Once the cluster exists:
+See `terraform/gcp/README.md` for module inputs (accelerator SKUs, pool sizing, spot). Once the cluster exists:
 
 ```bash
 gcloud container clusters get-credentials <cluster-name> --region <region> --project <project>

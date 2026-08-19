@@ -6,6 +6,8 @@ which only need the gateway URL and an API key).
 
 | Script | Purpose |
 |---|---|
+| `gcp-preflight.sh` | Prepare/verify a GCP project for deployment: checks gcloud auth, project access, and billing; enables all required Google APIs; checks ADC; reports GPU/CPU/SSD quotas with request instructions for anything at zero. Safe to re-run. |
+| `validate-catalog.sh` | Render every catalog preset (and an all-enabled combined pass) through `helm template`; run after adding or editing a preset. |
 | `connect.sh` | Port-forward the gateway, Ray dashboard, Grafana, and Prometheus, then chat with (or embed against) a selected model interactively. |
 | `test-endpoints.sh` | End-to-end smoke test of every gateway endpoint: models list, chat (plain/streaming/tools/vision), embeddings, `/v1/responses`, tokenize/detokenize roundtrip, auth enforcement, error handling. |
 | `load-test.sh` | Sustained concurrent chat/embedding load against models to measure autoscaling and node-provisioning behavior; logs scaling events and latency percentiles. |

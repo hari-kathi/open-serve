@@ -15,12 +15,23 @@ Both GPU pools scale to zero, so an idle cluster costs roughly the system pool p
 
 - An existing GCP project with billing linked (this example does not create projects)
 - [OpenTofu](https://opentofu.org/) or Terraform >= 1.5
+- Run the preflight script — it verifies auth/project/billing, **enables all
+  required APIs**, and reports GPU quota gaps with request instructions:
+
+  ```sh
+  ../../scripts/gcp-preflight.sh <PROJECT_ID> [REGION]
+  ```
+
 - `gcloud` authenticated with application default credentials:
 
   ```sh
   gcloud auth login
   gcloud auth application-default login
   ```
+
+  (or, for a short-lived non-interactive alternative:
+  `export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)` — valid
+  ~1 hour; re-export and re-run apply if it expires mid-apply)
 
 - **GPU quota.** New projects usually have zero GPU quota. Request it in
   IAM & Admin → Quotas before applying, or the pools will fail to scale up:
