@@ -95,6 +95,11 @@ Notes:
   module now grants `roles/artifactregistry.reader` automatically
   (`grant_default_node_sa_registry_access = true`); if you disabled it, grant
   your node service account registry read access yourself.
+- **GPU instance creation fails with `QUOTA_EXCEEDED` naming
+  `GPUS-ALL-REGIONS-per-project`** — the *global* GPU quota is separate from
+  the regional per-family quotas and starts at 0 on new projects (it does not
+  appear in regional quota listings). `scripts/gcp-preflight.sh` checks it and
+  prints the `gcloud quotas preferences create` request command.
 - **GPU nodes never appear; autoscaler logs `FailedScaleUp ... Internal error`**
   — check `gcloud compute operations list --filter='httpStatus>=400'`. If the
   message is *"billing account is currently in the free tier where non-TPU

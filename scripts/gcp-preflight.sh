@@ -115,6 +115,25 @@ else
   note "  export GOOGLE_OAUTH_ACCESS_TOKEN=\$(gcloud auth print-access-token)"
 fi
 
+echo "-- global GPU quota (GPUS_ALL_REGIONS — separate from regional quotas)"
+# Every GPU instance consumes this PROJECT-level quota in addition to the
+# regional per-family quota. New projects start at 0, and it does not appear
+# in regional quota listings — the classic silent blocker.
+GPUS_ALL=$(gcloud compute project-info describe --project "$PROJECT_ID" --format=json 2>/dev/null \
+  | python3 -c 'import json,sys; q={x["metric"]:x["limit"] for x in json.load(sys.stdin).get("quotas",[])}; print(q.get("GPUS_ALL_REGIONS","unknown"))')
+if [[ "$GPUS_ALL" == "0.0" || "$GPUS_ALL" == "0" ]]; then
+  todo "GPUS_ALL_REGIONS is 0 — no GPU instance can be created anywhere. Request an increase:"
+  note "  gcloud services enable cloudquotas.googleapis.com --project ${PROJECT_ID}"
+  note "  gcloud quotas preferences create --service=compute.googleapis.com \\"
+  note "    --quota-id=GPUS-ALL-REGIONS-per-project --preferred-value=<N> \\"
+  note "    --project=${PROJECT_ID} --email=<you> --justification='LLM serving on GPU nodes'"
+  note "  (small values are often auto-approved within minutes)"
+elif [[ "$GPUS_ALL" == "unknown" ]]; then
+  todo "Could not read GPUS_ALL_REGIONS (compute API may still be propagating)"
+else
+  ok "GPUS_ALL_REGIONS: ${GPUS_ALL}"
+fi
+
 echo "-- quotas in ${REGION} (GPU quotas start at 0 on new projects)"
 QUOTAS_JSON=$(gcloud compute regions describe "$REGION" --project "$PROJECT_ID" --format=json 2>/dev/null || true)
 if [[ -z "$QUOTAS_JSON" ]]; then
