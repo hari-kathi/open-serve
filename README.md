@@ -74,4 +74,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Adding support for a newly released open
 
 ## License
 
-[Apache-2.0](LICENSE)
+[AGPL-3.0](LICENSE)

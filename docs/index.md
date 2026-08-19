@@ -72,4 +72,4 @@ scripts/               # operational tooling (connect, smoke tests, load tests)
 
 Adding a preset for a newly released open-weights model is the easiest way to contribute — presets live in `catalog/models/`. See `CONTRIBUTING.md` in the repository root.
 
-open-serve is licensed under [Apache-2.0](https://github.com/hari-kathi/open-serve/blob/main/LICENSE).
+open-serve is licensed under [AGPL-3.0](https://github.com/hari-kathi/open-serve/blob/main/LICENSE).
