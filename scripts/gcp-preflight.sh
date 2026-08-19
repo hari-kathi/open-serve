@@ -137,6 +137,10 @@ print(limits.get(sys.argv[2], 'unknown'))" "$QUOTAS_JSON" "$metric")
   note "Request GPU quota increases at:"
   note "  https://console.cloud.google.com/iam-admin/quotas?project=${PROJECT_ID}"
   note "  (filter for 'NVIDIA', pick ${REGION}; small requests are often auto-approved in minutes)"
+  note "NOTE: GPU quota alone is not enough — free-tier billing accounts cannot"
+  note "create GPU instances at all (instance insert fails with 'non-TPU"
+  note "accelerators are not available'). Upgrade to a paid billing account:"
+  note "  https://console.cloud.google.com/billing"
 fi
 
 echo

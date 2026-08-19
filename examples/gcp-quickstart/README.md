@@ -95,6 +95,13 @@ Notes:
   module now grants `roles/artifactregistry.reader` automatically
   (`grant_default_node_sa_registry_access = true`); if you disabled it, grant
   your node service account registry read access yourself.
+- **GPU nodes never appear; autoscaler logs `FailedScaleUp ... Internal error`**
+  — check `gcloud compute operations list --filter='httpStatus>=400'`. If the
+  message is *"billing account is currently in the free tier where non-TPU
+  accelerators are not available"*, the billing account must be upgraded to a
+  paid account (Console → Billing → Upgrade). GPU quota alone is not
+  sufficient; free-tier billing blocks all GPU instance creation. The pending
+  pod schedules automatically once the autoscaler retries after the upgrade.
 - **GPU pool creation fails with `Accelerator type ... does not exist in zone`**
   — regional clusters place pools in every zone unless `node_locations`
   restricts them, and not every zone carries every GPU. List availability with
