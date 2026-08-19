@@ -8,6 +8,18 @@ data "google_project" "this" {
   project_id = var.project_id
 }
 
+# Nodes run as the default compute service account unless overridden. New GCP
+# projects no longer auto-grant that SA any role, so without this binding
+# kubelet gets 403 pulling from Artifact Registry in the same project
+# (observed on a real fresh project). Disable if you manage node identity
+# yourself.
+resource "google_project_iam_member" "default_node_sa_registry_reader" {
+  count   = var.grant_default_node_sa_registry_access ? 1 : 0
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+}
+
 locals {
   oauth_scopes = [
     "https://www.googleapis.com/auth/logging.write",

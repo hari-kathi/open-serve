@@ -86,3 +86,17 @@ Notes:
   gateways, persistent disks) can block VPC deletion — clean up in-cluster
   resources (or delete the Gateway/Service objects) before `tofu destroy`.
 - Enabled APIs are left enabled on destroy by design.
+
+## Troubleshooting
+
+- **Pods stuck in `ImagePullBackOff` with `403 Forbidden` from Artifact
+  Registry** — new GCP projects grant the default compute service account no
+  roles, so kubelet cannot pull images even from the same project. The cluster
+  module now grants `roles/artifactregistry.reader` automatically
+  (`grant_default_node_sa_registry_access = true`); if you disabled it, grant
+  your node service account registry read access yourself.
+- **GPU pool creation fails with `Accelerator type ... does not exist in zone`**
+  — regional clusters place pools in every zone unless `node_locations`
+  restricts them, and not every zone carries every GPU. List availability with
+  `gcloud compute accelerator-types list --filter="zone:<region>"` and set
+  `node_locations` on the pool.

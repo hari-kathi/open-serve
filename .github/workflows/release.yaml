@@ -55,7 +55,7 @@ jobs:
           tags: ghcr.io/hari-kathi/open-serve-${{ matrix.name }}:${{ env.VERSION }}
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: ghcr.io/hari-kathi/open-serve-${{ matrix.name }}:${{ env.VERSION }}
           format: table

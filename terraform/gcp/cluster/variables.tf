@@ -206,3 +206,9 @@ variable "hf_token_secret_id" {
   description = "Secret Manager secret ID for the Hugging Face token."
   default     = "open-serve-hf-token"
 }
+
+variable "grant_default_node_sa_registry_access" {
+  description = "Grant roles/artifactregistry.reader on the project to the default compute service account so GKE nodes can pull images from same-project Artifact Registry. New projects grant that SA nothing by default. Set false if you manage node identity yourself."
+  type        = bool
+  default     = true
+}
