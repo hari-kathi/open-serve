@@ -4,9 +4,17 @@ LABEL description="open-serve synthetic probe — exercises every production mod
 
 WORKDIR /app
 
+# Patch OS packages: the slim base periodically carries fixable HIGH CVEs
+# (e.g. util-linux) that the release Trivy gate rightly rejects.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && rm -rf /root/.cache
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y pip setuptools \
+    && rm -rf /root/.cache
 
 # Copy application
 COPY main.py .
