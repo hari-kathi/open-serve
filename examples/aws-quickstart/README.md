@@ -80,6 +80,7 @@ helm install cluster-autoscaler autoscaler/cluster-autoscaler -n kube-system \
   --set autoDiscovery.clusterName=open-serve \
   --set awsRegion=us-east-1 \
   --set rbac.serviceAccount.name=cluster-autoscaler \
+  --set image.tag=v1.31.2 \
   --set 'rbac.serviceAccount.annotations.eks\.amazonaws\.com/role-arn'=<autoscaler-role-arn>
 
 # KubeRay operator + the open-serve chart — exactly like the GCP quickstart
@@ -136,3 +137,9 @@ Notes:
   `kube-system/cluster-autoscaler`, but the upstream chart's *default* SA name is
   `<release>-aws-cluster-autoscaler`. Keep `--set rbac.serviceAccount.name=cluster-autoscaler`
   in the install command (already shown above) so the names match.
+- **cluster-autoscaler runs but never scales anything; logs full of
+  `ResourceSlice`/`DeviceClass` watch errors** — the chart's default image tag
+  tracks the latest autoscaler, whose informers wait on resource APIs your
+  cluster version doesn't serve, so the scaling loop never starts. Pin the
+  image to your cluster's minor version (`--set image.tag=v1.31.2` for EKS
+  1.31), per upstream's version-matching policy.

@@ -2,6 +2,7 @@ site_name: open-serve
 site_description: >-
   An open, batteries-included model-serving framework for Kubernetes,
   built on Ray Serve, Ray Serve LLM, and vLLM.
+site_url: https://hari-kathi.github.io/open-serve/
 repo_url: https://github.com/hari-kathi/open-serve
 repo_name: hari-kathi/open-serve
 edit_uri: edit/main/docs/
@@ -53,6 +54,7 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Quickstart:
+      - Choosing your path: quickstart/index.md
       - Local demo on kind: quickstart/kind.md
       - End-to-end on GCP: quickstart/gcp.md
       - End-to-end on AWS: quickstart/aws.md

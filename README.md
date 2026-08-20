@@ -64,9 +64,15 @@ docs/                  # documentation
 scripts/               # operational tooling (connect, smoke tests, load tests)
 ```
 
-## Quickstart
+## Deploy it
 
-Coming with v0.1.0 — a kind-based CPU demo and a GCP end-to-end guide. Track progress in the issues.
+Full guides at **[hari-kathi.github.io/open-serve](https://hari-kathi.github.io/open-serve/)** — written for anyone with basic Kubernetes/Terraform familiarity, validated command-by-command on real accounts:
+
+- **[Local on kind](docs/quickstart/kind.md)** — the full stack with a CPU demo model in ~10 minutes; no cloud account or GPUs (`examples/kind-local/run.sh`)
+- **[GCP / GKE](docs/quickstart/gcp.md)** — Terraform reference to a GPU-ready cluster (`examples/gcp-quickstart/`), then models from the catalog
+- **[AWS / EKS](docs/quickstart/aws.md)** — same, on EKS with IRSA (`examples/aws-quickstart/`)
+
+Both cloud guides lead with the preflight scripts (`scripts/gcp-preflight.sh`, `scripts/aws-preflight.sh`) that check the zero-by-default GPU quotas every new account hits.
 
 ## Contributing
 
