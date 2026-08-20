@@ -252,7 +252,12 @@ resource "aws_iam_role" "worker" {
   tags = var.tags
 }
 
+# The count guard must be on the document too: an unconditional document
+# interpolates var.model_bucket_name eagerly and fails the plan when the
+# variable is null (found on a real apply — `validate` cannot catch it).
 data "aws_iam_policy_document" "worker_models" {
+  count = var.model_bucket_name != null ? 1 : 0
+
   statement {
     actions   = ["s3:ListBucket"]
     resources = ["arn:aws:s3:::${var.model_bucket_name}"]
@@ -269,7 +274,7 @@ resource "aws_iam_role_policy" "worker_models" {
 
   name   = "model-bucket-read"
   role   = aws_iam_role.worker.id
-  policy = data.aws_iam_policy_document.worker_models.json
+  policy = data.aws_iam_policy_document.worker_models[0].json
 }
 
 # --- Cluster autoscaler identity (IRSA) ---
