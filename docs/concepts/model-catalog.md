@@ -16,7 +16,7 @@ qwen3-8b:
   tier: production                  # production → probed + SLO-gated alerts; internal-test → not probed
   runner: chat                      # probe dispatch: chat | embedding | anything else
   category: LLM                     # status-page section (LLM, Embedding, Reranker, ...)
-  type: vllm-raw                    # which runner executes the model (see Runners)
+  type: vllm                        # which runner executes the model (see Runners)
   routePrefix: "/"
   sharedMemorySize: "20Gi"          # /dev/shm for tensor-parallel workers
   vllmArgs:                         # tested engine flags — the heart of the preset

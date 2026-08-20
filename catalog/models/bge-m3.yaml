@@ -6,12 +6,18 @@
 # License: MIT. Context length: 8,192 tokens — well suited to long-passage
 # retrieval.
 #
-# Served via vllm-raw with vLLM's pooling runner (`runner: pooling` under
+# Served via type: vllm with vLLM's pooling runner (`runner: pooling` under
 # vllmArgs — the successor to the older `task: embed` flag), which exposes
-# /v1/embeddings and /pooling. Routing note: the gateway routes by path
-# prefix, so give this model its own prefix (e.g. /embed) in
-# gateway.backends pointing at rayservice-bge-m3-serve-svc, and clients
-# call <prefix>/v1/embeddings.
+# /v1/embeddings and /pooling. Routing note: the gateway routes embedding
+# requests by the request body's `model` field via gateway.modelRoutes —
+# clients POST /v1/embeddings with model "BAAI/bge-m3" and the gateway
+# forwards to the model's RayService. Wire it up with:
+#
+#   gateway:
+#     modelRoutes:
+#       BAAI/bge-m3:
+#         service: rayservice-bge-m3-serve-svc
+#         port: 8000
 #
 # GPU sizing (indicative — validate for your accelerator/quota):
 #   accelerator   gpus  tp  max_model_len  notes
@@ -28,11 +34,11 @@ bge-m3:
   runner: embedding
   category: Embedding
   description: "BGE-M3 multilingual long-context text-embedding model"
-  type: vllm-raw
+  type: vllm
   rayVersion: "2.55.1"
   image:
     repository: "hari-kathi/open-serve-vllm"
-    tag: "0.1.0"
+    tag: "0.2.0"
   routePrefix: "/"
   vllmArgs:
     model: "BAAI/bge-m3"

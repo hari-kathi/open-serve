@@ -23,11 +23,11 @@ mistral-small-24b-instruct:
   runner: chat
   category: LLM
   description: "Mistral Small 3 (24B) latency-optimized chat model"
-  type: vllm-raw
+  type: vllm
   rayVersion: "2.55.1"
   image:
     repository: "hari-kathi/open-serve-vllm"
-    tag: "0.1.0"
+    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "20Gi"
   vllmArgs:

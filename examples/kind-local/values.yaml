@@ -55,12 +55,10 @@ gateway:
   apiKeySecret:
     name: "open-serve-api-keys"
     key: "key-map.json"
-  # Route by model name (chat/completions body `model: echo`) instead of by
-  # path prefix: an empty `backends` list disables path-prefix routing so the
-  # modelRoutes table is actually exercised. defaultBackendUrl covers
-  # everything else and is also what the gateway's /healthz readiness checks.
-  defaultBackendUrl: "http://rayservice-echo-serve-svc:8000"
-  backends: []
+  # Route by model name: the chat/completions body's `model: echo` resolves
+  # through the modelRoutes table to the echo RayService. The gateway's
+  # /healthz is self-contained (it no longer probes a backend), so no
+  # default backend is needed.
   modelRoutes:
     echo:
       service: rayservice-echo-serve-svc

@@ -22,11 +22,11 @@ gemma-3-27b-it:
   runner: chat
   category: LLM
   description: "Google Gemma 3 27B instruction-tuned chat model"
-  type: vllm-raw
+  type: vllm
   rayVersion: "2.55.1"
   image:
     repository: "hari-kathi/open-serve-vllm"
-    tag: "0.1.0"
+    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "20Gi"
   vllmArgs:

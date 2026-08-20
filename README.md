@@ -27,10 +27,10 @@ Gateway API (TLS)  ─or─  internal LB
 open-serve-gateway
    ├─ validates Bearer token against key map
    ├─ records openserve_requests_total{source, model, org}
-   └─ routes by path-prefix and/or model name
-        ├─ /v1/chat/completions  → rayservice-<model>-serve-svc  (per model)
-        ├─ /v1/embeddings        → rayservice-<embed-model>-serve-svc
-        └─ /tokenize, /detokenize, /v1/responses, …  (vllm-raw models)
+   └─ routes every request by the body's "model" field (gateway.modelRoutes)
+        ├─ model: Qwen/Qwen3-8B         → rayservice-qwen3-8b-serve-svc
+        ├─ model: mxbai-embed-large-v1  → rayservice-mxbai-embed-serve-svc
+        └─ chat, embeddings, /tokenize, /detokenize, /v1/responses, … alike
 ```
 
 Each model runs as its **own RayService**, so models scale, roll out, and fail independently.
@@ -39,11 +39,11 @@ Each model runs as its **own RayService**, so models scale, roll out, and fail i
 
 | `type:` | Use when | API surface |
 |---|---|---|
-| `vllm-raw` *(default)* | Full vLLM OpenAI API needed | Everything vLLM serves: `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`, `/tokenize`, `/detokenize`, `/v1/score`, `/v1/rerank`, audio |
+| `vllm` *(default)* | Any OpenAI-compatible model — chat, completions, embeddings, multimodal | Everything vLLM serves: `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`, `/tokenize`, `/detokenize`, `/v1/score`, `/v1/rerank`, audio |
 | `ray-serve-llm` | Ray Serve LLM's `LLMConfig` + `build_openai_app` flow | `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models` |
 | `custom` | Non-LLM models (rerankers, OCR, CNNs) | Your own serve script / import path |
 
-Models needing `/tokenize` and `/detokenize` should be deployed as `vllm-raw` — those endpoints come natively from vLLM.
+Every `vllm` model serves `/tokenize` and `/detokenize` natively — the gateway routes them by the request body's `model` field like every other endpoint. `ray-serve-llm` models don't serve them.
 
 ## Repository layout
 
@@ -54,7 +54,7 @@ services/
   probe/               # synthetic end-to-end prober
   status/              # public status page
 runtimes/
-  vllm/                # vllm-raw runtime (ASGI passthrough to vLLM's OpenAI app)
+  vllm/                # vllm runtime (ASGI passthrough to vLLM's OpenAI app)
   ray-serve-llm/       # ray-serve-llm runtime image
 catalog/models/        # curated model presets
 deploy/flux/           # GitOps reference (FluxCD + kustomize)

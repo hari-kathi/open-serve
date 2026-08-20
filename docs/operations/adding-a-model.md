@@ -8,8 +8,8 @@ The runbook for putting a new model behind the gateway, from preset to validated
 
 See [Runners](../concepts/runners.md) for the full decision table. Short version:
 
-- LLM needing the full vLLM surface (`/v1/responses`, `/tokenize`, `/detokenize`, score/rerank, audio) → `vllm-raw`
-- LLM where chat/completions/embeddings is enough → `ray-serve-llm`
+- Any OpenAI-compatible model — chat, completions, embeddings (via pooling), multimodal → `vllm`
+- LLM where the chat/completions/embeddings subset is enough and you prefer `LLMConfig`-style config → `ray-serve-llm`
 - Anything else (reranker, OCR, CNN) → `custom`
 
 ## 2. Add or merge a `serveModels` entry
@@ -25,9 +25,7 @@ Fields that matter operationally:
 
 ## 3. Wire the gateway route
 
-The gateway resolves a backend in strict precedence order: **path prefix → model route → default backend**. Each model's Service is `rayservice-<name>-serve-svc` on port 8000.
-
-**Chat models — route by the `model` field** with `gateway.modelRoutes`. Chat requests all share the `/v1/chat/completions` path, so the discriminator is the request body's `model` value:
+One instruction: add the served model id to `gateway.modelRoutes`. The gateway routes every authenticated request — chat, completions, embeddings, `/tokenize`, `/detokenize`, `/v1/responses`, everything — by the request body's `model` field. Each model's Service is `rayservice-<name>-serve-svc` on port 8000:
 
 ```yaml
 gateway:
@@ -37,20 +35,7 @@ gateway:
       port: 8000
 ```
 
-!!! warning "Path prefixes beat model routes"
-    A `gateway.backends` entry with `pathPrefix: "/v1"` catches *every* `/v1/*` request before model routes are consulted — model-based routing would never fire. When you rely on `modelRoutes`, don't keep a `/v1` catch-all in `backends`; let unmatched requests fall through to `defaultBackendUrl` instead.
-
-**Embedding (and other path-shaped) models — route by path prefix** with `gateway.backends`, e.g. when clients call the model under a dedicated prefix:
-
-```yaml
-gateway:
-  backends:
-    - pathPrefix: "/embed"
-      service: "rayservice-mxbai-embed-serve-svc"
-      port: 8000
-```
-
-(Embedding requests also carry a `model` field, so `modelRoutes` works for them too if they're called at the standard `/v1/embeddings` path.)
+Embedding models are wired identically — embedding requests carry a `model` field like everything else. A request whose body has no `model` field gets a `400`; a `model` value not present in `modelRoutes` gets a `404`.
 
 ## 4. Deploy
 
@@ -91,13 +76,11 @@ BASE_URL=http://localhost:8000 API_KEY=<your-key> \
 
 ## Worked example: Qwen3-8B from the catalog
 
-Environment values, end to end (preset from `catalog/models/example-qwen3-8b.yaml`):
+Environment values, end to end (preset from `catalog/models/qwen3-8b.yaml`):
 
 ```yaml
 gateway:
   enabled: true
-  defaultBackendUrl: "http://rayservice-qwen3-8b-serve-svc:8000"
-  backends: []                       # no /v1 catch-all — let modelRoutes decide
   modelRoutes:
     "Qwen/Qwen3-8B":
       service: "rayservice-qwen3-8b-serve-svc"
@@ -111,11 +94,11 @@ serveModels:
     runner: chat
     category: LLM
     description: "Qwen3 8B general-purpose chat model"
-    type: vllm-raw
+    type: vllm
     rayVersion: "2.55.1"
     image:
       repository: "hari-kathi/open-serve-vllm"
-      tag: "0.1.0"
+      tag: "0.2.0"
     routePrefix: "/"
     sharedMemorySize: "20Gi"
     vllmArgs:

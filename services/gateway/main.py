@@ -1,4 +1,23 @@
-"""open-serve Gateway — API key authentication, backend routing, and usage metrics."""
+"""open-serve Gateway — API key authentication, model-based routing, and usage metrics.
+
+Routing contract, in order of precedence:
+
+1. Paths in SKIP_AUTH_PATHS ("/", "/health", "/healthz", "/metrics") are
+   handled locally by the gateway itself — no auth, no backend involved.
+2. Paths matching a PUBLIC_ROUTES prefix (JSON map of path-prefix → backend
+   URL) are forwarded to that backend WITHOUT auth. This is how the public
+   status page is exposed through the gateway.
+3. Everything else requires a valid Bearer key, then routes purely by model:
+   a. GET /v1/models — fan out to the unique set of MODEL_ROUTES backends
+      concurrently and merge the listings.
+   b. GET/DELETE /v1/models/<id> — route by <id> via MODEL_ROUTES.
+   c. Any other request — parse the JSON body's top-level `model` field and
+      look it up in MODEL_ROUTES (modelId → backend URL). A missing or
+      unparseable model is a 400; a model not in MODEL_ROUTES is a 404.
+      vLLM accepts `model` in every request body (chat, completions,
+      embeddings, responses, tokenize/detokenize, rerank), so this covers
+      every endpoint.
+"""
 
 import asyncio
 import json
@@ -25,12 +44,15 @@ if _key_map_file and os.path.exists(_key_map_file):
 else:
     API_KEYS = json.loads(os.environ.get("API_KEY_MAP", "{}"))
 
-# Backend routing table: path prefix → backend URL
-BACKENDS: list[dict] = json.loads(os.environ.get("BACKEND_ROUTES", "[]"))
-DEFAULT_BACKEND = os.environ.get("DEFAULT_BACKEND_URL", "http://rayservice-llm-serve-svc:8000")
-
-# Model-based routing: model name → backend URL (overrides path-based routing)
+# Model-based routing: model name → backend URL. The only routing table for
+# authenticated traffic — a model absent from this map does not exist.
 MODEL_ROUTES: dict[str, str] = json.loads(os.environ.get("MODEL_ROUTES", "{}"))
+
+# Unauthenticated path-prefix forwarding: path prefix → backend URL, e.g.
+# {"/status": "http://open-serve-status:8080", "/static/": "http://open-serve-status:8080"}.
+# Used for the public status page; empty by default so nothing is exposed
+# unless an operator opts in.
+PUBLIC_ROUTES: dict[str, str] = json.loads(os.environ.get("PUBLIC_ROUTES", "{}"))
 
 # Model → tier classification (production | internal-test). Loaded from ConfigMap
 # volume or env var. Used to label metrics so SLO dashboards and alerts can
@@ -42,29 +64,21 @@ if _tier_map_file and os.path.exists(_tier_map_file):
 else:
     MODEL_TIER_MAP = json.loads(os.environ.get("MODEL_TIER_MAP", "{}"))
 
-# Reusable HTTP clients (one per backend, connection pooling)
+# Per-backend timeout for the /v1/models fan-out. Cold scale-to-zero
+# backends will exceed this and be silently dropped from the listing
+# rather than waking them up just for a directory call. Override via
+# env for environments with slow control planes.
+MODELS_AGGREGATE_TIMEOUT_S = float(os.environ.get("MODELS_AGGREGATE_TIMEOUT_S", "3.0"))
+
+# Reusable HTTP clients (one per backend URL, connection pooling)
 _clients: dict[str, httpx.AsyncClient] = {}
 
 
-def get_backend(path: str, model: str = "") -> tuple[str, httpx.AsyncClient]:
-    """Route request to the correct backend. Path prefix first, then model routes, then default."""
-    # Path-prefix routing (highest priority — catches /tokenize, /v1/embeddings, etc.)
-    for route in BACKENDS:
-        if path.startswith(route["prefix"]):
-            url = route["url"]
-            if url not in _clients:
-                _clients[url] = httpx.AsyncClient(base_url=url, timeout=300.0)
-            return url, _clients[url]
-    # Model-based routing (for paths not matched by explicit prefix routes)
-    if model and model in MODEL_ROUTES:
-        url = MODEL_ROUTES[model]
-        if url not in _clients:
-            _clients[url] = httpx.AsyncClient(base_url=url, timeout=300.0)
-        return url, _clients[url]
-    # Default backend
-    if DEFAULT_BACKEND not in _clients:
-        _clients[DEFAULT_BACKEND] = httpx.AsyncClient(base_url=DEFAULT_BACKEND, timeout=300.0)
-    return DEFAULT_BACKEND, _clients[DEFAULT_BACKEND]
+def _client_for(url: str) -> httpx.AsyncClient:
+    """Return the cached httpx client for a backend, creating one on miss."""
+    if url not in _clients:
+        _clients[url] = httpx.AsyncClient(base_url=url, timeout=300.0)
+    return _clients[url]
 
 
 def _is_streaming_request(body: bytes) -> bool:
@@ -75,38 +89,22 @@ def _is_streaming_request(body: bytes) -> bool:
         return False
 
 
-# Per-backend timeout for the /v1/models fan-out. Cold scale-to-zero
-# backends will exceed this and be silently dropped from the listing
-# rather than waking them up just for a directory call. Override via
-# env for environments with slow control planes.
-MODELS_AGGREGATE_TIMEOUT_S = float(os.environ.get("MODELS_AGGREGATE_TIMEOUT_S", "3.0"))
-
-
-def _all_backend_urls() -> set[str]:
-    """Every distinct backend URL the proxy knows about, across the
-    path-prefix table, model-routes table, and the default backend."""
-    urls: set[str] = {DEFAULT_BACKEND}
-    urls.update(MODEL_ROUTES.values())
-    for route in BACKENDS:
-        urls.add(route["url"])
-    return urls
-
-
-def _client_for(url: str) -> httpx.AsyncClient:
-    """Return the cached httpx client for a backend, creating one on miss."""
-    if url not in _clients:
-        _clients[url] = httpx.AsyncClient(base_url=url, timeout=300.0)
-    return _clients[url]
+def _openai_error(status: int, message: str, param: str | None = None) -> JSONResponse:
+    """OpenAI-style error envelope for routing rejections."""
+    error: dict = {"message": message, "type": "invalid_request_error"}
+    if param is not None:
+        error["param"] = param
+    return JSONResponse(status_code=status, content={"error": error})
 
 
 async def aggregate_models() -> JSONResponse:
-    """Fan out GET /v1/models across every known backend and merge the
-    results into a single OpenAI-compatible listing.
+    """Fan out GET /v1/models across every distinct MODEL_ROUTES backend and
+    merge the results into a single OpenAI-compatible listing.
 
     Each model on open-serve is its own Ray Serve app behind its own
     Service, so any single backend's /v1/models response only lists that
-    one app's own models. Without aggregation, callers can never see
-    anything beyond whichever backend is hardcoded as DEFAULT_BACKEND.
+    one app's own models. Without aggregation, callers could never see
+    the full catalog.
 
     Backends that timeout, fail to connect, or respond non-200 are
     skipped — listing is best-effort. A scale-to-zero backend will
@@ -129,7 +127,7 @@ async def aggregate_models() -> JSONResponse:
             return []
         return data if isinstance(data, list) else []
 
-    results = await asyncio.gather(*(fetch_one(u) for u in _all_backend_urls()))
+    results = await asyncio.gather(*(fetch_one(u) for u in set(MODEL_ROUTES.values())))
     merged: dict[str, dict] = {}
     for entries in results:
         for entry in entries:
@@ -176,30 +174,17 @@ latency_histogram = Histogram(
 # straight to the in-process handler.
 SKIP_AUTH_PATHS = frozenset({"/", "/health", "/healthz", "/metrics"})
 
-# Path PREFIXES that should be FORWARDED to a backend but WITHOUT requiring
-# a Bearer token. Used for the public status page routed through the
-# gateway at models.example.com/status — that path tree is intentionally
-# unauthenticated (matches conventions of status.huggingface.co and
-# status.openai.com). The default catches /status and /status.json (one
-# prefix), and the page's CSS/JS under /static/. Configurable as a
-# comma-separated list via the PUBLIC_FORWARD_PREFIXES env var.
-# Operators who don't want the status page exposed externally either
-# disable the status page in their deployment or remove the /status
-# entries from the backend routing table — without those backend routes
-# the gateway returns 502 here even though auth is skipped.
-PUBLIC_FORWARD_PREFIXES = tuple(
-    p.strip()
-    for p in os.environ.get("PUBLIC_FORWARD_PREFIXES", "/status,/static/").split(",")
-    if p.strip()
-)
-
 # Header carrying the caller's organization id, used for the `org` metric
 # label. Configurable so deployments can keep an existing header name.
 ORG_ID_HEADER = os.environ.get("ORG_ID_HEADER", "x-openserve-org-id")
 
 
-def _is_public_forward(path: str) -> bool:
-    return any(path.startswith(p) for p in PUBLIC_FORWARD_PREFIXES)
+def _public_route_for(path: str) -> str | None:
+    """Backend URL for an unauthenticated public-prefix path, or None."""
+    for prefix, url in PUBLIC_ROUTES.items():
+        if path.startswith(prefix):
+            return url
+    return None
 
 
 @app.middleware("http")
@@ -210,69 +195,78 @@ async def auth_and_track(request: Request, call_next):
     if path in SKIP_AUTH_PATHS:
         return await call_next(request)
 
-    is_public = _is_public_forward(path)
+    # Public-prefix forwards (status page). No auth; source="public" keeps
+    # this traffic in a separate metrics bucket from authenticated calls.
+    public_url = _public_route_for(path)
+    if public_url is not None:
+        body = await request.body()
+        request_counter.labels(source="public", model="unknown", org="unknown", tier="unknown").inc()
+        return await _handle_standard(
+            _client_for(public_url), request, _forward_headers(request), body,
+            "public", "unknown", "unknown", "unknown",
+        )
 
-    # Validate API key — skipped for public-forward paths so /status works
-    # without an Authorization header. We still mark source="public" for
-    # metrics so the bucket separates from authenticated traffic.
-    if is_public:
-        source = "public"
-    else:
-        auth = request.headers.get("authorization", "")
-        if not auth.startswith("Bearer "):
-            error_counter.labels(source="unknown", model="unknown", error_type="auth_failed", tier="unknown").inc()
-            return JSONResponse(status_code=401, content={"detail": "Missing Bearer token"})
-        key = auth[7:]
-        source = API_KEYS.get(key)
-        if source is None:
-            error_counter.labels(source="unknown", model="unknown", error_type="auth_failed", tier="unknown").inc()
-            return JSONResponse(status_code=401, content={"detail": "Invalid API key"})
-
-    # Extract model from request body (skipped on public paths — they're
-    # static HTML/CSS/JSON with no model field; the .read() also blocks
-    # body-less GETs anyway).
-    body = await request.body()
-    model = "unknown"
-    if not is_public:
-        try:
-            body_json = json.loads(body)
-            model = body_json.get("model", "unknown")
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
+    # Validate API key
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        error_counter.labels(source="unknown", model="unknown", error_type="auth_failed", tier="unknown").inc()
+        return JSONResponse(status_code=401, content={"detail": "Missing Bearer token"})
+    key = auth[7:]
+    source = API_KEYS.get(key)
+    if source is None:
+        error_counter.labels(source="unknown", model="unknown", error_type="auth_failed", tier="unknown").inc()
+        return JSONResponse(status_code=401, content={"detail": "Invalid API key"})
 
     # Extract the caller's org id from the configurable custom header
     org = request.headers.get(ORG_ID_HEADER, "unknown")
 
-    # Look up tier for this model (production | internal-test | unknown)
-    tier = MODEL_TIER_MAP.get(model, "unknown")
-
     # GET /v1/models is special: every model on open-serve is its own
-    # Ray Serve app, so forwarding to a single backend makes the listing always omit every
-    # other model. Aggregate across all known backends instead.
-    if request.method == "GET" and request.url.path == "/v1/models":
-        request_counter.labels(
-            source=source, model="<list>", org=org, tier="aggregate",
-        ).inc()
+    # Ray Serve app, so forwarding to a single backend would always omit
+    # every other model. Aggregate across all MODEL_ROUTES backends instead.
+    if request.method == "GET" and path == "/v1/models":
+        request_counter.labels(source=source, model="<list>", org=org, tier="aggregate").inc()
         return await aggregate_models()
 
-    # Route to correct backend (model routes → path prefix → default)
-    backend_url, client = get_backend(request.url.path, model)
+    # GET/DELETE /v1/models/<id> carries the model in the path, not the body.
+    if request.method in ("GET", "DELETE") and path.startswith("/v1/models/"):
+        model = path[len("/v1/models/"):]
+    else:
+        # Everything else routes by the JSON body's top-level `model` field.
+        body = await request.body()
+        try:
+            model = json.loads(body).get("model")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            model = None
+        if not isinstance(model, str) or not model:
+            error_counter.labels(source=source, model="unknown", error_type="missing_model", tier="unknown").inc()
+            return _openai_error(400, "request body must include a 'model' field")
 
-    forward_headers = {
-        k: v
-        for k, v in request.headers.items()
-        if k.lower() not in ("host", "content-length", "transfer-encoding")
-    }
+    tier = MODEL_TIER_MAP.get(model, "unknown")
+
+    backend_url = MODEL_ROUTES.get(model)
+    if backend_url is None:
+        error_counter.labels(source=source, model=model, error_type="unknown_model", tier=tier).inc()
+        return _openai_error(404, f"unknown model '{model}'", param="model")
+    client = _client_for(backend_url)
+
+    body = await request.body()
+    forward_headers = _forward_headers(request)
 
     # Record request metrics (before forwarding — latency recorded after)
     request_counter.labels(source=source, model=model, org=org, tier=tier).inc()
 
-    is_streaming = _is_streaming_request(body)
-
-    if is_streaming:
+    if _is_streaming_request(body):
         return await _handle_streaming(client, request, forward_headers, body, source, model, org, tier)
     else:
         return await _handle_standard(client, request, forward_headers, body, source, model, org, tier)
+
+
+def _forward_headers(request: Request) -> dict[str, str]:
+    return {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length", "transfer-encoding")
+    }
 
 
 async def _handle_streaming(client, request, forward_headers, body, source, model, org, tier):
@@ -401,13 +395,9 @@ async def health():
 
 @app.get("/healthz")
 async def healthz():
-    """Readiness probe — checks default backend connectivity."""
-    try:
-        _, client = get_backend("/v1")
-        resp = await client.get("/v1/models", timeout=5.0)
-        backend_ok = resp.status_code == 200
-    except Exception:
-        backend_ok = False
-    if not backend_ok:
-        raise HTTPException(status_code=503, detail="Backend not ready")
-    return {"status": "ok", "backend": "ok"}
+    """Readiness probe — ready once the API key map is loaded. No backend
+    is probed: routing is per-model, so no single backend's health says
+    anything about the gateway's ability to serve."""
+    if not API_KEYS:
+        raise HTTPException(status_code=503, detail="API key map not loaded")
+    return {"status": "ok"}

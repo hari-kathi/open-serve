@@ -1,4 +1,4 @@
-# Plain Ray Serve + vLLM image for open-serve — the `vllm-raw` runner.
+# Plain Ray Serve + vLLM image for open-serve — the `vllm` runner.
 #
 # Unlike the ray-serve-llm runtime (built on rayproject/ray-llm, which bundles
 # ray.serve.llm + a curated vLLM), this image is built on the non-LLM

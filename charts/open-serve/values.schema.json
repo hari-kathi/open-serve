@@ -43,7 +43,7 @@
         "type": {
           "description": "Serving pattern. Defaults to 'custom' when unset.",
           "type": "string",
-          "enum": ["ray-serve-llm", "vllm-raw", "custom"]
+          "enum": ["vllm", "ray-serve-llm", "custom"]
         },
         "tier": {
           "description": "Only tier=production models are probed. Defaults to 'internal-test' when unset.",
@@ -58,7 +58,7 @@
         "description": { "type": "string" },
         "modelId": { "type": "string" },
         "vllmArgs": {
-          "description": "vLLM CLI flags as snake_case keys (type: vllm-raw). Free-form: any vLLM flag passes through.",
+          "description": "vLLM CLI flags as snake_case keys (type: vllm). Free-form: any vLLM flag passes through.",
           "type": "object",
           "additionalProperties": true
         },
@@ -150,19 +150,6 @@
             "host": { "type": "string" },
             "prometheusHost": { "type": "string" }
           }
-        },
-        "model": {
-          "description": "Legacy ray-serve-llm field (model spec consumed by injected serve scripts)."
-        },
-        "modelLoadingConfig": {
-          "description": "Legacy ray-serve-llm field.",
-          "type": "object",
-          "additionalProperties": true
-        },
-        "engine": {
-          "description": "Legacy ray-serve-llm field (engine kwargs).",
-          "type": "object",
-          "additionalProperties": true
         }
       }
     }
@@ -277,14 +264,13 @@
             "key": { "type": "string" }
           }
         },
-        "defaultBackendUrl": { "type": "string" },
-        "backends": {
-          "type": "array",
-          "items": {
+        "publicRoutes": {
+          "description": "Map of path prefix -> backend service, for unauthenticated path-prefix routing (e.g. status page assets).",
+          "type": "object",
+          "additionalProperties": {
             "type": "object",
             "additionalProperties": true,
             "properties": {
-              "pathPrefix": { "type": "string" },
               "service": { "type": "string" },
               "port": { "type": "integer" }
             }

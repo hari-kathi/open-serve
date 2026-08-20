@@ -39,7 +39,7 @@ which only need the gateway URL and an API key).
 | `CHAT_MODELS` | space-separated chat models | `qwen3-8b` |
 | `EMBED_MODELS` | embedding models | none (section skipped) |
 | `VL_MODELS` | vision-language models | none (section skipped) |
-| `RESPONSES_MODELS` | vllm-raw models for `/v1/responses` | `CHAT_MODELS` |
+| `RESPONSES_MODELS` | vllm models for `/v1/responses` | `CHAT_MODELS` |
 | `TOKENIZE_MODELS` | models for `/tokenize` + `/detokenize` | `CHAT_MODELS` |
 
 ### `load-test.sh`

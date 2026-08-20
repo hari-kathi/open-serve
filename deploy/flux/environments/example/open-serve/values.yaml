@@ -24,7 +24,7 @@ statusPage:
 #     enabled: true
 #     modelId: "Qwen/Qwen3-8B"
 #     tier: production
-#     type: vllm-raw
+#     type: vllm
 #     routePrefix: "/"
 #     sharedMemorySize: "20Gi"
 #     vllmArgs:

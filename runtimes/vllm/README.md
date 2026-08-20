@@ -1,6 +1,6 @@
-# `vllm` runtime — the `vllm-raw` runner image
+# `vllm` runtime — the `vllm` runner image
 
-This image backs open-serve's **`vllm-raw`** runner: a plain Ray Serve
+This image backs open-serve's **`vllm`** runner: a plain Ray Serve
 deployment (`vllm_serve_app.py`, baked into the image) that dispatches every
 incoming request into vLLM's own OpenAI-compatible FastAPI app via the ASGI
 protocol — a `__call__` + ASGI passthrough, not `@serve.ingress`.

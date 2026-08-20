@@ -3,7 +3,7 @@
   - serveScript / serveScriptFile inject a Python module (mounted at
     /app/serve-scripts, on PYTHONPATH). Required for type: ray-serve-llm,
     where the script builds an LLMConfig + build_openai_app application.
-  - type: vllm-raw models get a placeholder ConfigMap (the serve module is
+  - type: vllm models get a placeholder ConfigMap (the serve module is
     baked into the open-serve-vllm image).
   - type: custom models without an injected script also get a placeholder
     (they provide their own importPath but still need a ConfigMap for the
@@ -27,9 +27,9 @@ data:
   {{- else if $model.serveScriptFile }}
   {{ $model.serveScriptFilename | default (printf "serve_%s.py" ($name | replace "-" "_")) }}: |-
 {{ $.Files.Get $model.serveScriptFile | nindent 4 }}
-  {{- else if eq ($model.type | default "custom") "vllm-raw" }}
+  {{- else if eq ($model.type | default "custom") "vllm" }}
   placeholder.txt: |
-    # vllm-raw model — serve module baked into the open-serve-vllm image
+    # vllm model — serve module baked into the open-serve-vllm image
     # at /home/ray/vllm_serve_app.py (on PYTHONPATH). Args are provided via
     # serveConfigV2.applications[].args in rayservice.yaml.
   {{- else if eq ($model.type | default "custom") "ray-serve-llm" }}
@@ -40,7 +40,6 @@ data:
   {{- else }}
   placeholder.txt: |
     # Custom model — serve script provided via importPath: {{ $model.importPath }}
-    # Add serveScript or serveScriptFile in values to inject a Python script here.
   {{- end }}
 {{- end }}
 {{- end }}

@@ -20,11 +20,11 @@ deepseek-r1-distill-llama-8b:
   runner: chat
   category: LLM
   description: "DeepSeek-R1 reasoning distill of Llama 3.1 8B"
-  type: vllm-raw
+  type: vllm
   rayVersion: "2.55.1"
   image:
     repository: "hari-kathi/open-serve-vllm"
-    tag: "0.1.0"
+    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "16Gi"
   vllmArgs:

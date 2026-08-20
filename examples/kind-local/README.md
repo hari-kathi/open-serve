@@ -92,6 +92,6 @@ PodMonitor/PrometheusRule/Grafana resources.
 
 - `kind.yaml` — single-node kind cluster config (cluster name `open-serve`)
 - `values.yaml` — chart values: arm64 Ray image, gateway wired to the `echo`
-  RayService via `modelRoutes` + `defaultBackendUrl`, inline `serveScript`
+  RayService via `modelRoutes`, inline `serveScript`
 - `run.sh` — build → cluster → operator → chart → wait → assertions
 - `cleanup.sh` — `kind delete cluster --name open-serve`

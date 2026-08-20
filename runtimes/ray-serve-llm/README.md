@@ -11,7 +11,7 @@ from ray.serve.llm import LLMConfig, build_openai_app
 `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models`.
 If a model needs the full vLLM endpoint surface (`/v1/responses`,
 `/tokenize`, `/detokenize`, `/v1/score`, `/v1/rerank`, audio), use the
-`vllm-raw` runner (`runtimes/vllm/`) instead.
+`vllm` runner (`runtimes/vllm/`) instead.
 
 ## Build
 

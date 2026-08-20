@@ -20,11 +20,11 @@ gpt-oss-20b:
   runner: chat
   category: LLM
   description: "OpenAI gpt-oss-20b open-weights MoE reasoning model (MXFP4)"
-  type: vllm-raw
+  type: vllm
   rayVersion: "2.55.1"
   image:
     repository: "hari-kathi/open-serve-vllm"
-    tag: "0.1.0"
+    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "16Gi"
   vllmArgs:

@@ -8,7 +8,7 @@ flowchart TD
     E --> GW[open-serve-gateway]
     GW -->|1. validate key against key map| GW
     GW -->|2. record openserve_requests_total| GW
-    GW -->|3. route: path prefix → model → default| R
+    GW -->|3. route by request body model field| R
     subgraph R [Per-model RayServices]
         M1[rayservice-qwen3-8b-serve-svc<br/>head + GPU workers]
         M2[rayservice-mxbai-embed-serve-svc<br/>head + workers]
@@ -20,12 +20,14 @@ A request arrives with a Bearer token. The gateway:
 
 1. **Authenticates** — looks the token up in the key map (Secret `open-serve-api-keys`) and resolves it to a `source` name. No match → 401.
 2. **Meters** — increments `openserve_requests_total{source, model, org, tier}`, where `model` comes from the request body's `model` field, `org` from a configurable header (`x-openserve-org-id` by default), and `tier` from the model→tier map the chart renders.
-3. **Routes** — picks a backend in strict precedence order:
-    1. **Path prefix** (`gateway.backends`) — first matching prefix wins. Catches path-shaped surfaces like `/tokenize` or a dedicated `/embed` prefix.
-    2. **Model route** (`gateway.modelRoutes`) — the request body's `model` value mapped to a specific RayService Service.
-    3. **Default backend** (`gateway.defaultBackendUrl`).
+3. **Routes** — by the JSON request body's `model` field, for *every* endpoint: chat, completions, embeddings, `/tokenize`, `/detokenize`, `/v1/responses`, score/rerank, audio. The gateway looks the `model` value up in `gateway.modelRoutes` and forwards to that model's RayService Service. There is no path-prefix routing and no default backend:
 
-    One special case: `GET /v1/models` is not forwarded at all — the gateway fans out to *every* backend it knows about and merges the results, since each per-model backend only lists its own models (see [API reference](../reference/api.md#get-v1models-aggregation)).
+    - Body has no `model` field → `400` (OpenAI-style error).
+    - `model` value not in `modelRoutes` → `404` (OpenAI-style error).
+
+    One special case: `GET /v1/models` carries no body, so it is not forwarded at all — the gateway fans out to *every* backend in `modelRoutes` and merges the results, since each per-model backend only lists its own models (see [API reference](../reference/api.md#get-v1models-aggregation)).
+
+    The status page is the only no-auth forwarding path: `gateway.publicRoutes` maps a small set of path prefixes (auto-wired when `statusPage` is enabled) to the status Service, bypassing both auth and model routing.
 
 4. **Forwards** — non-streaming responses are buffered so token usage can be extracted into `openserve_tokens_total`; `"stream": true` requests are proxied chunk-by-chunk as SSE.
 
@@ -73,7 +75,7 @@ With `min: 0`, an idle model's Serve replicas — and, with worker bounds set ac
 
 | Component | Kind | Role |
 |---|---|---|
-| **gateway** (`services/gateway`) | Deployment (default 2 replicas + PDB) | Bearer-token auth against the key map, path/model routing, `/v1/models` aggregation, usage metrics (`openserve_requests_total`, `openserve_tokens_total`, `openserve_errors_total`, latency histogram) |
+| **gateway** (`services/gateway`) | Deployment (default 2 replicas + PDB) | Bearer-token auth against the key map, model-field routing via `modelRoutes`, `/v1/models` aggregation, `publicRoutes` forwarding for the status page, usage metrics (`openserve_requests_total`, `openserve_tokens_total`, `openserve_errors_total`, latency histogram) |
 | **probe** (`services/probe`) | Deployment (1 replica, internal scheduler) | Synthetic end-to-end prober: internal liveness direct to each RayService + external functional request through the gateway, every 15 minutes, for `tier: production` models only |
 | **status** (`services/status`) | Deployment (2 replicas) | Public status page reading `openserve_probe_*` from Prometheus; three-tier (healthy/degraded/down) classification, hourly uptime strips, incident history |
 | **monitoring** (chart resources) | ConfigMaps, PodMonitors, PrometheusRules | Six Grafana dashboards, alert rules, and scrape configs that plug into an existing kube-prometheus-stack |

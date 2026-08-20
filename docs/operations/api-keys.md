@@ -93,4 +93,4 @@ So: keep one entry in the key map whose source is `monitor` (e.g. `"sk-monitor-<
 
 ## What doesn't need a key
 
-The gateway's own endpoints (`/`, `/health`, `/healthz`, `/metrics`) are served locally without auth, and the status-page path tree (`/status`, `/status.json`, `/static/` — configurable via `PUBLIC_FORWARD_PREFIXES`) is forwarded without auth, metered as `source="public"`. Everything else requires a valid Bearer token. See the [API reference](../reference/api.md#authentication).
+The gateway's own endpoints (`/`, `/health`, `/healthz`, `/metrics`) are served locally without auth, and the status-page path tree (`/status`, `/status.json`, `/static/` — configurable via `gateway.publicRoutes`) is forwarded without auth, metered as `source="public"`. Everything else requires a valid Bearer token. See the [API reference](../reference/api.md#authentication).

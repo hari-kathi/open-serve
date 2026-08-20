@@ -111,8 +111,6 @@ externalGateway:
 
 gateway:
   enabled: true
-  defaultBackendUrl: "http://rayservice-qwen3-8b-serve-svc:8000"
-  backends: []
   modelRoutes:
     Qwen/Qwen3-8B:
       service: rayservice-qwen3-8b-serve-svc

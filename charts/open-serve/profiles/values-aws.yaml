@@ -35,16 +35,16 @@ gateway:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-gateway
-    tag: "0.1.0"
+    tag: "0.2.0"
   # Create the API-key Secret before install (see docs/operations/api-keys.md):
   #   kubectl -n open-serve create secret generic open-serve-api-keys \
   #     --from-literal=key-map.json='{"sk-team1-<hex>": "team1"}'
   apiKeySecret:
     name: "open-serve-api-keys"
     key: "key-map.json"
-  defaultBackendUrl: "http://rayservice-qwen3-8b-serve-svc:8000"
-  backends:
-    - pathPrefix: "/v1"
+  # Route by the request body's `model` field to the matching RayService.
+  modelRoutes:
+    Qwen/Qwen3-8B:
       service: "rayservice-qwen3-8b-serve-svc"
       port: 8000
 
@@ -60,7 +60,7 @@ serveModels: {}
   # qwen3-8b:
   #   enabled: true
   #   modelId: "Qwen/Qwen3-8B"
-  #   type: vllm-raw
+  #   type: vllm
   #   tier: internal-test          # promote to "production" to enable probing
   #   runner: chat
   #   category: LLM
@@ -68,7 +68,7 @@ serveModels: {}
   #   rayVersion: "2.55.1"
   #   image:
   #     repository: "hari-kathi/open-serve-vllm"
-  #     tag: "0.1.0"
+  #     tag: "0.2.0"
   #   routePrefix: "/"
   #   sharedMemorySize: "4Gi"
   #   vllmArgs:

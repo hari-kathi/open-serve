@@ -15,9 +15,27 @@ Authorization: Bearer sk-<source>-<hex>
 
 Optionally, send `x-openserve-org-id: <org>` (header name configurable) to attribute usage to a downstream org in the metrics.
 
+## Routing
+
+The gateway routes **every** authenticated request by the JSON request body's `model` field — chat, completions, embeddings, `/tokenize`, `/detokenize`, `/v1/responses`, score/rerank, audio alike. The `model` value is looked up in `gateway.modelRoutes` and the request is forwarded to that model's backend. There is no path-based routing and no default backend.
+
+- Body missing the `model` field → `400`:
+
+```json
+{"error": {"message": "Request body must include a 'model' field", "type": "invalid_request_error", "code": "missing_model"}}
+```
+
+- `model` value not present in `modelRoutes` → `404`:
+
+```json
+{"error": {"message": "Unknown model: <model>", "type": "invalid_request_error", "code": "model_not_found"}}
+```
+
 ## Endpoints by runner
 
-| Endpoint | `vllm-raw` | `ray-serve-llm` | `custom` |
+Routing is runner-agnostic — the gateway forwards by the `model` field regardless of runner — but what the backend *answers* depends on the model's [runner](../concepts/runners.md). Requests for an endpoint the runner doesn't serve get a `404` from the backend.
+
+| Endpoint | `vllm` | `ray-serve-llm` | `custom` |
 |---|:---:|:---:|:---:|
 | `POST /v1/chat/completions` | yes | yes | — |
 | `POST /v1/completions` | yes | yes | — |
@@ -30,11 +48,11 @@ Optionally, send `x-openserve-org-id: <org>` (header name configurable) to attri
 | `POST /v1/audio/*` (transcriptions) | yes | no | — |
 | Your own routes | — | — | whatever the serve script exposes |
 
-`custom` models expose whatever their serve script defines, typically routed via a dedicated `gateway.backends` path prefix.
+`custom` models expose whatever their serve script defines; requests reach them like any other model — by the `model` field in the body, mapped in `gateway.modelRoutes`.
 
 ## `GET /v1/models` aggregation
 
-Each model runs behind its own Service, so any single backend's `/v1/models` only lists its own models. The gateway therefore **does not forward** `GET /v1/models` — it fans out to every backend it knows about (path-prefix routes, model routes, and the default backend) and merges the results into one OpenAI-style listing:
+Each model runs behind its own Service, so any single backend's `/v1/models` only lists its own models. The gateway therefore **does not forward** `GET /v1/models` — it fans out to every backend in `gateway.modelRoutes` and merges the results into one OpenAI-style listing:
 
 - Best-effort: backends that time out, refuse connections, or return non-200 are silently skipped.
 - Short per-backend timeout (`MODELS_AGGREGATE_TIMEOUT_S`, default 3s) — a scale-to-zero backend times out and is **dropped from the listing rather than woken up**. An idle model missing from `/v1/models` can still serve requests addressed to it directly.
@@ -55,9 +73,9 @@ Served or forwarded **without** auth:
 | Path | Behavior |
 |---|---|
 | `/`, `/health` | Gateway liveness (also used by LB health checks) |
-| `/healthz` | Gateway readiness — checks default-backend connectivity, `503` if not ready |
+| `/healthz` | Gateway readiness — `503` if not ready |
 | `/metrics` | Gateway's own Prometheus metrics |
-| `/status`, `/status.json`, `/static/*` | Forwarded (unauthenticated, metered as `source="public"`) to the status page, when routed in `gateway.backends`. Configurable via `PUBLIC_FORWARD_PREFIXES`. |
+| `/status`, `/status.json`, `/static/*` | Forwarded (unauthenticated, metered as `source="public"`) to the status page via the `gateway.publicRoutes` prefix map — auto-wired when `statusPage` is enabled. |
 
 ## Examples
 
@@ -106,7 +124,7 @@ curl $BASE_URL/v1/embeddings \
   }'
 ```
 
-**Tokenize / detokenize** (`vllm-raw` models only):
+**Tokenize / detokenize** (served natively by every `vllm` model; routed by the `model` field like everything else):
 
 ```bash
 curl $BASE_URL/tokenize \

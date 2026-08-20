@@ -8,13 +8,19 @@ metadata:
     app: open-serve-gateway
     app.kubernetes.io/component: gateway
 data:
-  backend-routes.json: |
-    {{- $routes := list }}
-    {{- range .Values.gateway.backends }}
-    {{- $route := dict "prefix" .pathPrefix "url" (printf "http://%s:%s" .service (toString (.port | default 8000))) }}
-    {{- $routes = append $routes $route }}
+  # Unauthenticated path-prefix routes (prefix -> URL). When the status page
+  # is enabled, "/status" and "/static/" default to the status service;
+  # entries set in gateway.publicRoutes always win.
+  public-routes.json: |
+    {{- $publicRoutes := dict }}
+    {{- if .Values.statusPage.enabled }}
+    {{- $_ := set $publicRoutes "/status" "http://open-serve-status:8000" }}
+    {{- $_ := set $publicRoutes "/static/" "http://open-serve-status:8000" }}
     {{- end }}
-    {{ $routes | toJson }}
+    {{- range $prefix, $backend := .Values.gateway.publicRoutes }}
+    {{- $_ := set $publicRoutes $prefix (printf "http://%s:%s" $backend.service (toString ($backend.port | default 8000))) }}
+    {{- end }}
+    {{ $publicRoutes | toJson }}
   {{- if .Values.gateway.modelRoutes }}
   model-routes.json: |
     {{- $modelRoutes := dict }}

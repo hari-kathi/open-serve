@@ -4,13 +4,12 @@
 
 # Default container image for Ray head and worker pods.
 # Individual models can override this via the 'image' field.
-# open-serve-ray-serve-llm = Ray image with ray.serve.llm (type: ray-serve-llm).
-# open-serve-vllm          = Ray + vLLM ASGI passthrough image (type: vllm-raw);
-#                            models of that type typically override with it.
+# open-serve-vllm = Ray + vLLM ASGI passthrough image (type: vllm). Models of
+# type: custom typically override with a plain Ray image or their own build.
 image:
   registry: ghcr.io
-  repository: hari-kathi/open-serve-ray-serve-llm
-  tag: "0.1.0"
+  repository: hari-kathi/open-serve-vllm
+  tag: "0.2.0"
 
 # ServiceAccount used by Ray head and worker pods — e.g. for object-storage
 # access to model weights via workload identity / IRSA. Must exist in the
@@ -102,7 +101,7 @@ gateway:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-gateway
-    tag: "0.1.0"
+    tag: "0.2.0"
     pullPolicy: IfNotPresent
   replicas: 2
   resources:
@@ -116,19 +115,23 @@ gateway:
   apiKeySecret:
     name: "open-serve-api-keys"
     key: "key-map.json"
-  # Default backend for requests that don't match any path prefix
-  defaultBackendUrl: "http://rayservice-llm-serve-svc:8000"
-  # Path-based routing to multiple Ray Serve backends
-  backends:
-    - pathPrefix: "/v1"
-      service: "rayservice-llm-serve-svc"
-      port: 8000
-    # Additional backends (uncomment when models are deployed):
-    # - pathPrefix: "/reranker"
-    #   service: "rayservice-reranker-serve-svc"
+  # Model-based routing: map of model id (the `model` field in request
+  # bodies) -> backend Ray Serve service. Rendered as MODEL_ROUTES.
+  modelRoutes: {}
+    # Qwen/Qwen3-8B:
+    #   service: rayservice-qwen3-8b-serve-svc
     #   port: 8000
-    # - pathPrefix: "/embed"
-    #   service: "rayservice-embed-serve-svc"
+    # mixedbread-ai/mxbai-embed-large-v1:
+    #   service: rayservice-mxbai-embed-large-v1-serve-svc
+    #   port: 8000
+  # Unauthenticated path-prefix routing: map of path prefix -> backend
+  # service. Rendered as PUBLIC_ROUTES (JSON map prefix -> URL). When
+  # statusPage.enabled is true, "/status" and "/static/" entries pointing at
+  # the status service are added automatically unless set here (entries set
+  # here always win).
+  publicRoutes: {}
+    # /status:
+    #   service: open-serve-status
     #   port: 8000
 
 # =============================================================================
@@ -156,7 +159,7 @@ probe:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-probe
-    tag: "0.1.0"
+    tag: "0.2.0"
     pullPolicy: IfNotPresent
   replicas: 1
   resources:
@@ -189,7 +192,7 @@ statusPage:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-status
-    tag: "0.1.0"
+    tag: "0.2.0"
     pullPolicy: IfNotPresent
   replicas: 2
   # Sized for the snapshot build: daily-strip aggregation + 30-day
@@ -284,26 +287,27 @@ externalGateway:
 # =============================================================================
 # Three patterns supported via the `type:` field:
 #
-#   type: ray-serve-llm — ray.serve.llm pattern: provide an inline serveScript
-#                      (or serveScriptFile) that builds an LLMConfig +
-#                      build_openai_app application; the chart injects it into
-#                      a ConfigMap mounted at /app/serve-scripts. Only exposes
-#                      the chat/completions/embeddings subset that
-#                      ray.serve.llm.build_openai_app proxies.
+#   type: vllm       — the open-serve-vllm image bakes vllm_serve_app.py at
+#                      /home/ray (on PYTHONPATH); it mounts vLLM's own
+#                      FastAPI app via @serve.ingress so every route vLLM
+#                      registers is reachable (/v1/responses, /v1/score,
+#                      /v1/rerank, /tokenize, /pooling, /classify, audio
+#                      transcriptions, etc.). Provide vLLM CLI flags as
+#                      snake_case keys under `vllmArgs:`; the chart wires
+#                      them into serveConfigV2.applications[].args. Override
+#                      Ray Serve deployment options (num_gpus, replicas) via
+#                      the standard replicas/autoscaling/gpu fields — the
+#                      chart emits a deployments: block targeting the
+#                      VLLMOpenAI deployment name.
 #
-#   type: vllm-raw   — drop ray.serve.llm entirely. The open-serve-vllm
-#                      image bakes vllm_serve_app.py at /home/ray (on
-#                      PYTHONPATH); it mounts vLLM's own FastAPI app via
-#                      @serve.ingress so every route vLLM registers is
-#                      reachable (/v1/responses, /v1/score, /v1/rerank,
-#                      /tokenize, /pooling, /classify, audio transcriptions,
-#                      etc.). Provide vLLM CLI flags as snake_case keys under
-#                      `vllmArgs:`; the chart wires them into
-#                      serveConfigV2.applications[].args. Override Ray Serve
-#                      deployment options (num_gpus, replicas) via the
-#                      standard replicas/autoscaling/gpu fields — the chart
-#                      emits a deployments: block targeting the VLLMOpenAI
-#                      deployment name.
+#   type: ray-serve-llm — Ray Serve LLM's LLMConfig + build_openai_app flow.
+#                      Provide a serveScript (or serveScriptFile) building the
+#                      application; exposes the chat/completions/embeddings/
+#                      models subset of the OpenAI API. Use the
+#                      open-serve-ray-serve-llm image (Ray 2.53 + vLLM 0.13
+#                      pinned combo). `vllm` is the default choice; this
+#                      runner suits teams standardizing on the Ray Serve LLM
+#                      library API.
 #
 #   type: custom     — Non-LLM models (CNNs, rerankers, classifiers, etc.).
 #                      Provide importPath + (optionally) serveScript or
@@ -324,7 +328,7 @@ serveModels: {}
   # qwen3-8b:
   #   enabled: true
   #   modelId: "Qwen/Qwen3-8B"
-  #   type: vllm-raw
+  #   type: vllm
   #   tier: internal-test          # promote to "production" to enable probing
   #   runner: chat
   #   category: LLM
@@ -332,7 +336,7 @@ serveModels: {}
   #   rayVersion: "2.55.1"
   #   image:
   #     repository: "hari-kathi/open-serve-vllm"
-  #     tag: "0.1.0"
+  #     tag: "0.2.0"
   #   routePrefix: "/"
   #   sharedMemorySize: "20Gi"
   #   # Every key under vllmArgs forwards into vLLM's own argparse

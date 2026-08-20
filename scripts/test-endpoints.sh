@@ -11,7 +11,7 @@
 #   CHAT_MODELS       chat models to exercise            (default: qwen3-8b)
 #   EMBED_MODELS      embedding models for /v1/embeddings (default: none)
 #   VL_MODELS         vision-language models              (default: none)
-#   RESPONSES_MODELS  vllm-raw models for /v1/responses   (default: CHAT_MODELS)
+#   RESPONSES_MODELS  vllm models for /v1/responses   (default: CHAT_MODELS)
 #   TOKENIZE_MODELS   models for /tokenize + /detokenize  (default: CHAT_MODELS)
 
 set -euo pipefail
@@ -248,12 +248,12 @@ if [[ -n "${EMBED_MODELS}" ]]; then
   echo ""
 fi
 
-# --- /v1/responses (vllm-raw models only) ---
+# --- /v1/responses (vllm models only) ---
 # Exercises the OpenAI Responses API surface that ray.serve.llm's
-# build_openai_app does NOT proxy. Only type:vllm-raw models register
-# this route. Any chat-tier model deployed via type:vllm-raw belongs in
+# build_openai_app does NOT proxy. Only type:vllm models register
+# this route. Any chat-tier model deployed via type:vllm belongs in
 # RESPONSES_MODELS.
-echo -e "${BOLD}POST /v1/responses${NC} ${DIM}(vllm-raw)${NC}"
+echo -e "${BOLD}POST /v1/responses${NC} ${DIM}(vllm)${NC}"
 for model in ${RESPONSES_MODELS}; do
   run_test "$model" \
     "-H 'Content-Type: application/json' '${BASE_URL}/v1/responses' -d '{\"model\":\"$model\",\"input\":\"Reply with only the number: 7 times 8?\",\"max_output_tokens\":10}'" || true

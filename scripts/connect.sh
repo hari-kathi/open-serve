@@ -152,7 +152,7 @@ print("true" if has_mm else "false")
     fi
   fi
 
-  # For `type: vllm-raw` models, the ConfigMap is a placeholder (the serve
+  # For `type: vllm` models, the ConfigMap is a placeholder (the serve
   # module is baked into the image, not the ConfigMap), so the
   # `model_id="..."` regex above doesn't match. Fall back to parsing the
   # RayService's serveConfigV2 for the `served_model_name` / `model`
@@ -167,7 +167,7 @@ print("true" if has_mm else "false")
 import re, sys
 cfg = sys.argv[1]
 # Prefer served_model_name (what clients pass in `model`); fall back to
-# the `model:` key (which for vllm-raw is the local mirror path or HF id).
+# the `model:` key (which for vllm is the local mirror path or HF id).
 served = re.search(r"served_model_name:\s*\"?([^\"\n#]+)\"?", cfg)
 model = re.search(r"^\s+model:\s*\"?([^\"\n#]+)\"?", cfg, re.M)
 mid = served or model
@@ -178,7 +178,7 @@ print("true" if re.search(r"limit_mm_per_prompt:", cfg) else "false")
       rs_mid=$(echo "${rs_meta}" | sed -n '1p')
       if [[ -n "${rs_mid}" ]]; then
         API_MODEL_ID="${rs_mid}"
-        # vllm-raw is currently always chat; future runners (rerank,
+        # vllm is currently always chat; future runners (rerank,
         # embedding) would need explicit detection.
         CAPABILITY="chat"
         IS_VL=$(echo "${rs_meta}" | sed -n '2p')

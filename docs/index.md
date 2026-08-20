@@ -22,12 +22,12 @@ GCP/GKE is the first supported provider; bring-your-own-cluster is a first-class
 flowchart TD
     C[Client<br/>Authorization: Bearer sk-&lt;source&gt;-&lt;hex&gt;] --> LB[Gateway API / TLS<br/>or internal LB]
     LB --> GW[open-serve-gateway<br/>auth · usage metrics · routing]
-    GW -->|/v1/chat/completions| M1[rayservice-&lt;chat-model&gt;-serve-svc]
-    GW -->|/v1/embeddings| M2[rayservice-&lt;embed-model&gt;-serve-svc]
-    GW -->|/tokenize · /detokenize · /v1/responses| M3[vllm-raw models]
+    GW -->|model: Qwen/Qwen3-8B| M1[rayservice-qwen3-8b-serve-svc]
+    GW -->|model: mxbai-embed-large-v1| M2[rayservice-mxbai-embed-serve-svc]
+    GW -->|model: &lt;any modelRoutes entry&gt;| M3[rayservice-&lt;model&gt;-serve-svc]
 ```
 
-The gateway validates the Bearer token against a key map, records `openserve_requests_total{source, model, org, tier}`, and routes by path prefix and/or the request body's `model` field. Each model is an **independent RayService**: models scale, roll out, and fail in isolation. See [Architecture](concepts/architecture.md) for the full picture.
+The gateway validates the Bearer token against a key map, records `openserve_requests_total{source, model, org, tier}`, and routes **every** request — chat, embeddings, `/tokenize`, `/detokenize`, `/v1/responses` — by the request body's `model` field. Each model is an **independent RayService**: models scale, roll out, and fail in isolation. See [Architecture](concepts/architecture.md) for the full picture.
 
 ## Pick a runner
 
@@ -35,11 +35,11 @@ Every model entry declares a `type:` that selects one of three runners:
 
 | `type:` | Use when | API surface |
 |---|---|---|
-| `vllm-raw` *(default choice)* | You want the full vLLM OpenAI API | Everything vLLM serves: chat, completions, embeddings, `/v1/responses`, `/tokenize`, `/detokenize`, `/v1/score`, `/v1/rerank`, audio |
+| `vllm` *(default)* | Any OpenAI-compatible model — chat, completions, embeddings, multimodal | Everything vLLM serves: chat, completions, embeddings, `/v1/responses`, `/tokenize`, `/detokenize`, `/v1/score`, `/v1/rerank`, audio |
 | `ray-serve-llm` | You want Ray Serve LLM's `LLMConfig` + `build_openai_app` flow | `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/models` |
 | `custom` | Non-LLM models (rerankers, OCR, CNNs) | Your own serve script / import path |
 
-Rule of thumb: if you need `/tokenize` or `/detokenize`, deploy with `vllm-raw` — those endpoints come natively from vLLM. Details in [Runners](concepts/runners.md).
+Every `vllm` model serves `/tokenize` and `/detokenize` natively — routed by `model` like everything else; `ray-serve-llm` models don't serve them. Details in [Runners](concepts/runners.md).
 
 ## Where to go next
 
@@ -59,7 +59,7 @@ services/
   probe/               # synthetic end-to-end prober
   status/              # public status page
 runtimes/
-  vllm/                # vllm-raw runtime (ASGI passthrough to vLLM's OpenAI app)
+  vllm/                # vllm runtime (ASGI passthrough to vLLM's OpenAI app)
   ray-serve-llm/       # ray-serve-llm runtime image
 catalog/models/        # curated model presets
 deploy/flux/           # GitOps reference (FluxCD + kustomize)

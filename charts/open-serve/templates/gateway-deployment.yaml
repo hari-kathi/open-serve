@@ -39,13 +39,11 @@ spec:
           env:
             - name: API_KEY_MAP_FILE
               value: "/secrets/key-map.json"
-            - name: BACKEND_ROUTES
+            - name: PUBLIC_ROUTES
               valueFrom:
                 configMapKeyRef:
                   name: open-serve-gateway-config
-                  key: backend-routes.json
-            - name: DEFAULT_BACKEND_URL
-              value: {{ .Values.gateway.defaultBackendUrl | default "http://rayservice-llm-serve-svc:8000" | quote }}
+                  key: public-routes.json
             {{- if .Values.gateway.modelRoutes }}
             - name: MODEL_ROUTES
               valueFrom:

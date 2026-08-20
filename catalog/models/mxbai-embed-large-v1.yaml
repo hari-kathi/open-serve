@@ -5,12 +5,18 @@
 # supports Matryoshka truncation). License: Apache-2.0. Context length:
 # 512 tokens.
 #
-# Served via vllm-raw with vLLM's pooling runner (`runner: pooling` under
+# Served via type: vllm with vLLM's pooling runner (`runner: pooling` under
 # vllmArgs — the successor to the older `task: embed` flag), which exposes
-# /v1/embeddings and /pooling. Routing note: the gateway routes by path
-# prefix, so give this model its own prefix (e.g. /embed) in
-# gateway.backends pointing at rayservice-mxbai-embed-large-v1-serve-svc,
-# and clients call <prefix>/v1/embeddings.
+# /v1/embeddings and /pooling. Routing note: the gateway routes embedding
+# requests by the request body's `model` field via gateway.modelRoutes —
+# clients POST /v1/embeddings with model "mixedbread-ai/mxbai-embed-large-v1"
+# and the gateway forwards to the model's RayService. Wire it up with:
+#
+#   gateway:
+#     modelRoutes:
+#       mixedbread-ai/mxbai-embed-large-v1:
+#         service: rayservice-mxbai-embed-large-v1-serve-svc
+#         port: 8000
 #
 # GPU sizing (indicative — validate for your accelerator/quota):
 #   accelerator   gpus  tp  max_model_len  notes
@@ -27,11 +33,11 @@ mxbai-embed-large-v1:
   runner: embedding
   category: Embedding
   description: "mxbai-embed-large-v1 English text-embedding model (1024-dim)"
-  type: vllm-raw
+  type: vllm
   rayVersion: "2.55.1"
   image:
     repository: "hari-kathi/open-serve-vllm"
-    tag: "0.1.0"
+    tag: "0.2.0"
   routePrefix: "/"
   vllmArgs:
     model: "mixedbread-ai/mxbai-embed-large-v1"

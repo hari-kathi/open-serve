@@ -10,7 +10,7 @@ HTTP proxy via `StreamingResponse`. Every route vLLM registers —
 /classify, audio transcriptions, plus the standard chat/completions/
 embeddings — is reachable end-to-end.
 
-This module is the chart's `type: vllm-raw` import target. Reference it
+This module is the chart's `type: vllm` import target. Reference it
 from the per-model RayService as:
 
     serveConfigV2: |

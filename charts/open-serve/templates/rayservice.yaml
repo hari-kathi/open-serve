@@ -41,8 +41,12 @@ spec:
     - name: {{ $name }}-serve
       route_prefix: {{ $model.routePrefix | default "/" }}
       {{- if eq ($model.type | default "custom") "ray-serve-llm" }}
+      # Ray Serve LLM (LLMConfig + build_openai_app). The serve script is
+      # injected via the serve-<name>-script ConfigMap (serveScript /
+      # serveScriptFile in values) and exposes the chat/completions/
+      # embeddings/models subset of the OpenAI API.
       import_path: serve_{{ $name | replace "-" "_" }}:app
-      {{- else if eq $model.type "vllm-raw" }}
+      {{- else if eq $model.type "vllm" }}
       # Plain Ray Serve + vLLM. The vllm_serve_app module is baked into the
       # open-serve-vllm image at /home/ray (on PYTHONPATH) and mounts vLLM's
       # full OpenAI FastAPI app via @serve.ingress — exposes /v1/responses,
@@ -301,13 +305,13 @@ spec:
                                 if not isinstance(dep, dict):
                                     continue
                                 # Deployment name conventions in this chart:
-                                #   - "LLMServer:*" → ray.serve.llm.build_openai_app (type:ray-serve-llm)
                                 #   - "*-model"     → per-model "$name-model" (type:custom)
-                                #   - "VLLMOpenAI"  → vllm_serve_app's @serve.deployment (type:vllm-raw)
+                                #   - "VLLMOpenAI"  → vllm_serve_app's @serve.deployment (type:vllm)
+                                #   - "LLMServer:*" → ray.serve.llm.build_openai_app (type:ray-serve-llm)
                                 if not (
-                                    name.startswith("LLMServer:")
-                                    or name.endswith("-model")
+                                    name.endswith("-model")
                                     or name == "VLLMOpenAI"
+                                    or name.startswith("LLMServer:")
                                 ):
                                     continue
                                 for replica in dep.get("replicas", []):
