@@ -1,0 +1,102 @@
+# open-serve values profile for AWS (EKS + IRSA), matching the reference
+# infrastructure in terraform/aws/ and examples/aws-quickstart/.
+#
+# Minimal start: gateway on, monitoring/probe/status page off (enable
+# monitoring once kube-prometheus-stack CRDs exist on the cluster).
+#
+#   helm install open-serve oci://ghcr.io/hari-kathi/charts/open-serve \
+#     -n open-serve -f charts/open-serve/profiles/values-aws.yaml
+
+# The chart requires this ServiceAccount to pre-exist in the release
+# namespace (it does not create it). Create it and annotate it with the
+# worker IAM role from the Terraform outputs so IRSA hands serving pods
+# S3 read access to model weights:
+#
+#   kubectl -n open-serve create serviceaccount open-serve-worker
+#   kubectl -n open-serve annotate serviceaccount open-serve-worker \
+#     eks.amazonaws.com/role-arn=<worker_role_arn output>
+serviceAccount:
+  name: "open-serve-worker"
+
+monitoring:
+  enabled: false
+
+probe:
+  enabled: false
+
+statusPage:
+  enabled: false
+
+externalGateway:
+  enabled: false
+
+gateway:
+  enabled: true
+  image:
+    registry: ghcr.io
+    repository: hari-kathi/open-serve-gateway
+    tag: "0.1.0"
+  # Create the API-key Secret before install (see docs/operations/api-keys.md):
+  #   kubectl -n open-serve create secret generic open-serve-api-keys \
+  #     --from-literal=key-map.json='{"sk-team1-<hex>": "team1"}'
+  apiKeySecret:
+    name: "open-serve-api-keys"
+    key: "key-map.json"
+  defaultBackendUrl: "http://rayservice-qwen3-8b-serve-svc:8000"
+  backends:
+    - pathPrefix: "/v1"
+      service: "rayservice-qwen3-8b-serve-svc"
+      port: 8000
+
+# Example model sized for the quickstart's gpu-l4-1x pool (g6.xlarge:
+# 1x NVIDIA L4 24GB, 4 vCPU, 16GiB RAM). Adapted from
+# catalog/models/qwen3-8b.yaml — the L4 needs a reduced context window and
+# batch size vs the A100 default. Qwen3-8B bf16 weights (~16GB) stream
+# through the GPU, not node RAM, but g6.xlarge's 16GiB RAM is still tight:
+# the worker requests below leave headroom for kubelet + system daemons.
+# If you need more CPU/RAM slack (bigger max_num_seqs, larger shm), use
+# g6.2xlarge (8 vCPU / 32GiB) and raise the worker resources accordingly.
+serveModels: {}
+  # qwen3-8b:
+  #   enabled: true
+  #   modelId: "Qwen/Qwen3-8B"
+  #   type: vllm-raw
+  #   tier: internal-test          # promote to "production" to enable probing
+  #   runner: chat
+  #   category: LLM
+  #   description: "Qwen3 8B general-purpose chat model"
+  #   rayVersion: "2.55.1"
+  #   image:
+  #     repository: "hari-kathi/open-serve-vllm"
+  #     tag: "0.1.0"
+  #   routePrefix: "/"
+  #   sharedMemorySize: "4Gi"
+  #   vllmArgs:
+  #     model: "Qwen/Qwen3-8B"
+  #     served_model_name: "Qwen/Qwen3-8B"
+  #     # Pre-staged weights in your model bucket (read via IRSA), e.g.
+  #     # model_source: "s3://<your-model-bucket>/models/Qwen/Qwen3-8B"
+  #     tensor_parallel_size: 1
+  #     dtype: "bfloat16"
+  #     max_model_len: 8192        # L4 24GB; 32768 needs a 40GB+ GPU
+  #     max_num_seqs: 16
+  #     gpu_memory_utilization: 0.90
+  #     enable_auto_tool_choice: true
+  #     tool_call_parser: "hermes"
+  #     reasoning_parser: "qwen3"
+  #   replicas:
+  #     min: 0
+  #     max: 1
+  #   autoscaling:
+  #     targetOngoingRequests: 5
+  #     downscaleDelayS: 600
+  #     upscaleDelayS: 60
+  #   gpu:
+  #     count: 1
+  #     acceleratorType: "L4"
+  #     nodeSelector:
+  #       workload-type: gpu-l4-1x
+  #   resources:
+  #     worker:
+  #       requests: { cpu: "3", memory: "10Gi" }
+  #       limits:   { cpu: "3.5", memory: "12Gi" }

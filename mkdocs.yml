@@ -55,6 +55,7 @@ nav:
   - Quickstart:
       - Local demo on kind: quickstart/kind.md
       - End-to-end on GCP: quickstart/gcp.md
+      - End-to-end on AWS: quickstart/aws.md
   - Concepts:
       - Architecture: concepts/architecture.md
       - Runners: concepts/runners.md

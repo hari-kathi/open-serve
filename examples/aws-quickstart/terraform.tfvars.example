@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars and edit.
+region  = "us-east-1"
+profile = "open-serve"

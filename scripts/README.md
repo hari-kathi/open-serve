@@ -6,6 +6,7 @@ which only need the gateway URL and an API key).
 
 | Script | Purpose |
 |---|---|
+| `aws-preflight.sh` | Prepare/verify an AWS account: credentials, the two zero-default G/VT GPU vCPU quotas (with in-flight request tracking and optional filing), and GPU instance-type availability per AZ. Safe to re-run. |
 | `gcp-preflight.sh` | Prepare/verify a GCP project for deployment: checks gcloud auth, project access, and billing; enables all required Google APIs; checks ADC; reports GPU/CPU/SSD quotas with request instructions for anything at zero. Safe to re-run. |
 | `validate-catalog.sh` | Render every catalog preset (and an all-enabled combined pass) through `helm template`; run after adding or editing a preset. |
 | `connect.sh` | Port-forward the gateway, Ray dashboard, Grafana, and Prometheus, then chat with (or embed against) a selected model interactively. |

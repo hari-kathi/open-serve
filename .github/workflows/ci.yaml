@@ -94,6 +94,21 @@ jobs:
       - name: Validate catalog presets
         run: scripts/validate-catalog.sh
 
+  terraform:
+    name: terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+      - name: Validate all modules and example roots
+        run: |
+          set -e
+          for d in terraform/gcp/* terraform/aws/* examples/gcp-quickstart examples/aws-quickstart; do
+            [ -d "$d" ] || continue
+            echo "== $d"
+            (cd "$d" && tofu init -backend=false -input=false > /dev/null && tofu validate && tofu fmt -check)
+          done
+
   docs:
     name: docs build
     runs-on: ubuntu-latest
