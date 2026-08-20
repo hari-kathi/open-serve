@@ -33,6 +33,14 @@ theme:
     - search.suggest
     - search.highlight
 
+exclude_docs: |
+  macros.py
+
+plugins:
+  - search
+  - macros:
+      module_name: docs/macros
+
 markdown_extensions:
   - admonition
   - attr_list

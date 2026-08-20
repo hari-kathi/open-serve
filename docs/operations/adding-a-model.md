@@ -98,7 +98,7 @@ serveModels:
     rayVersion: "2.55.1"
     image:
       repository: "hari-kathi/open-serve-vllm"
-      tag: "0.2.0"
+      tag: "{{ release_version_bare }}"
     routePrefix: "/"
     sharedMemorySize: "20Gi"
     vllmArgs:

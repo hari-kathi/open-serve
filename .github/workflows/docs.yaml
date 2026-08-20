@@ -16,9 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the docs build can derive the release version
+          # from the latest git tag (docs/macros.py).
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install 'mkdocs-material~=9.0'
+      - run: pip install 'mkdocs-material~=9.0' mkdocs-macros-plugin
       - run: mkdocs build --strict
       - run: mkdocs gh-deploy --force

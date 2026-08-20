@@ -27,7 +27,7 @@ serveModels:
     modelId: "Qwen/Qwen3-8B"
     image:
       repository: "hari-kathi/open-serve-vllm"   # override the chart default image
-      tag: "0.2.0"
+      tag: "{{ release_version_bare }}"
     vllmArgs:                    # any vLLM CLI flag, snake_case
       model: "Qwen/Qwen3-8B"
       served_model_name: "Qwen/Qwen3-8B"
