@@ -13,8 +13,8 @@ open-serve turns a Kubernetes cluster into a production model-serving platform. 
 
 GCP/GKE is the first supported provider; bring-your-own-cluster is a first-class path. AWS and Azure are on the roadmap.
 
-!!! warning "Pre-release"
-    open-serve is under active development ahead of v0.1.0 — expect breaking changes until then.
+!!! info "Current release: v0.2.0"
+    See the [releases page](https://github.com/hari-kathi/open-serve/releases) for artifacts and notes. Pre-1.0, minor versions may include breaking changes (v0.2.0 changed gateway routing and renamed the `vllm` runner — see its notes if upgrading from v0.1.0).
 
 ## How a request flows
 

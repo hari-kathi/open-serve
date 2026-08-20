@@ -3,7 +3,7 @@
 `catalog/models/` holds curated, tested presets for open-weights models. A preset is a YAML fragment that plugs straight into the chart's `serveModels` map: tested `vllmArgs`, GPU sizing per accelerator type, context lengths, and probe metadata. The goal is that serving a well-known model is a merge + `enabled: true`, not a tuning project.
 
 !!! note "Catalog status"
-    Catalog v1 (~8–10 presets: gpt-oss, Llama 3.x, Qwen3 / Qwen3-VL, Gemma, DeepSeek-R1 distill, Mistral, mxbai / bge-m3 embeddings, bge-reranker) lands before v0.1.0. Check `catalog/models/` for what exists today.
+    Catalog v1 ships 12 presets: gpt-oss 20B/120B, Llama 3.1/3.3, Qwen3 8B/32B, Qwen3-VL, Gemma 3 27B, DeepSeek-R1 distill, Mistral Small, and mxbai / bge-m3 embeddings. See [`catalog/models/`](https://github.com/hari-kathi/open-serve/tree/main/catalog/models) for the current list.
 
 ## Anatomy of a preset
 
