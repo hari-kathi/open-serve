@@ -79,6 +79,7 @@ helm repo add autoscaler https://kubernetes.github.io/autoscaler
 helm install cluster-autoscaler autoscaler/cluster-autoscaler -n kube-system \
   --set autoDiscovery.clusterName=open-serve \
   --set awsRegion=us-east-1 \
+  --set rbac.serviceAccount.name=cluster-autoscaler \
   --set 'rbac.serviceAccount.annotations.eks\.amazonaws\.com/role-arn'=<autoscaler-role-arn>
 
 # KubeRay operator + the open-serve chart — exactly like the GCP quickstart
@@ -130,3 +131,8 @@ Notes:
   `kubectl -n kube-system get ds nvdp-nvidia-device-plugin`.
 - **`tofu destroy` hangs deleting the VPC** — leftover load-balancer ENIs.
   Delete the in-cluster LoadBalancer Services first, then re-run destroy.
+- **cluster-autoscaler crash-loops with `AssumeRoleWithWebIdentity ... AccessDenied`**
+  — the IRSA trust policy created by the cluster module names the ServiceAccount
+  `kube-system/cluster-autoscaler`, but the upstream chart's *default* SA name is
+  `<release>-aws-cluster-autoscaler`. Keep `--set rbac.serviceAccount.name=cluster-autoscaler`
+  in the install command (already shown above) so the names match.
