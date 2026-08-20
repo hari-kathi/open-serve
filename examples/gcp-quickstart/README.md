@@ -99,12 +99,15 @@ Notes:
   `GPUS-ALL-REGIONS-per-project`** — the *global* GPU quota is separate from
   the regional per-family quotas and starts at 0 on new projects (it does not
   appear in regional quota listings). `scripts/gcp-preflight.sh` checks it and
-  prints the `gcloud quotas preferences create` request command. On freshly
-  created or freshly upgraded billing accounts the API request is often
-  **auto-denied within seconds** (`stateDetail: "Quota request denied"`);
-  request it through the Console instead (IAM & Admin → Quotas → "GPUs (all
-  regions)" → Edit), and if that is also denied, accrue a day or two of paid
-  billing history and retry, or contact support.
+  prints the `gcloud quotas preferences create` request command. Note that
+  this global cap applies to **all** GPU VMs — spot/preemptible included — so
+  a granted `PREEMPTIBLE_NVIDIA_*` regional quota is necessary but not
+  sufficient while GPUS_ALL_REGIONS is 0. On freshly created or freshly
+  upgraded billing accounts the request is often **auto-denied within
+  seconds** (`stateDetail: "Quota request denied"`); request it through the
+  Console instead (IAM & Admin → Quotas → "GPUs (all regions)" → Edit), and
+  if that is also denied, accrue a day or two of paid billing history and
+  retry, or contact support.
 - **GPU nodes never appear; autoscaler logs `FailedScaleUp ... Internal error`**
   — check `gcloud compute operations list --filter='httpStatus>=400'`. If the
   message is *"billing account is currently in the free tier where non-TPU
