@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: probe
-          image: {{ .Values.probe.image.registry | default "ghcr.io" }}/{{ .Values.probe.image.repository }}:{{ .Values.probe.image.tag }}
+          image: {{ .Values.probe.image.registry | default "ghcr.io" }}/{{ .Values.probe.image.repository }}:{{ .Values.probe.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.probe.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8000

@@ -23,9 +23,6 @@ qwen3-vl-8b-instruct:
   description: "Qwen3-VL 8B Instruct vision-language model (image + text chat)"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "20Gi"
   vllmArgs:

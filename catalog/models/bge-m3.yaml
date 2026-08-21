@@ -36,9 +36,6 @@ bge-m3:
   description: "BGE-M3 multilingual long-context text-embedding model"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   vllmArgs:
     model: "BAAI/bge-m3"

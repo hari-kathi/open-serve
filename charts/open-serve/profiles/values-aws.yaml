@@ -35,7 +35,7 @@ gateway:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-gateway
-    tag: "0.2.0"
+    tag: ""   # empty = chart appVersion
   # Create the API-key Secret before install (see docs/operations/api-keys.md):
   #   kubectl -n open-serve create secret generic open-serve-api-keys \
   #     --from-literal=key-map.json='{"sk-team1-<hex>": "team1"}'
@@ -68,7 +68,7 @@ serveModels: {}
   #   rayVersion: "2.55.1"
   #   image:
   #     repository: "hari-kathi/open-serve-vllm"
-  #     tag: "0.2.0"
+  #     tag: ""   # empty = chart appVersion
   #   routePrefix: "/"
   #   sharedMemorySize: "4Gi"
   #   vllmArgs:

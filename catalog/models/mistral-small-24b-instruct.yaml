@@ -25,9 +25,6 @@ mistral-small-24b-instruct:
   description: "Mistral Small 3 (24B) latency-optimized chat model"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "20Gi"
   vllmArgs:

@@ -19,9 +19,6 @@ qwen3-32b:
   description: "Qwen3 32B chat model with hybrid reasoning"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "20Gi"
   vllmArgs:

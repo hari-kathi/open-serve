@@ -24,9 +24,6 @@ gpt-oss-120b:
   description: "OpenAI gpt-oss-120b open-weights MoE reasoning model (MXFP4)"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "32Gi"
   vllmArgs:

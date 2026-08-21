@@ -11,4 +11,7 @@ spec:
   interval: 5m0s
   url: oci://ghcr.io/hari-kathi/charts/open-serve
   ref:
-    tag: 0.1.0
+    # Track released charts by semver range so new releases roll out
+    # automatically. Pin an exact version instead (tag: 0.2.0) for
+    # environments where upgrades must be explicit — recommended for prod.
+    semver: ">=0.2.0 <1.0.0"

@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: status
-          image: {{ .Values.statusPage.image.registry | default "ghcr.io" }}/{{ .Values.statusPage.image.repository }}:{{ .Values.statusPage.image.tag }}
+          image: {{ .Values.statusPage.image.registry | default "ghcr.io" }}/{{ .Values.statusPage.image.repository }}:{{ .Values.statusPage.image.tag | default .Chart.AppVersion }}
           imagePullPolicy: {{ .Values.statusPage.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8000

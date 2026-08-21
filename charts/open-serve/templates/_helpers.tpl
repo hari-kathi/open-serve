@@ -34,7 +34,7 @@ app.kubernetes.io/part-of: open-serve
 Ray container image (global default).
 */}}
 {{- define "open-serve.image" -}}
-{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
 {{- end }}
 
 {{/*
@@ -43,7 +43,7 @@ Usage: {{ include "open-serve.modelImage" (dict "model" $model "global" $) }}
 */}}
 {{- define "open-serve.modelImage" -}}
 {{- if .model.image }}
-{{- .model.image.registry | default $.global.Values.image.registry }}/{{ .model.image.repository | default $.global.Values.image.repository }}:{{ .model.image.tag | default $.global.Values.image.tag }}
+{{- .model.image.registry | default $.global.Values.image.registry }}/{{ .model.image.repository | default $.global.Values.image.repository }}:{{ .model.image.tag | default $.global.Values.image.tag | default $.global.Chart.AppVersion }}
 {{- else }}
 {{- include "open-serve.image" .global }}
 {{- end }}

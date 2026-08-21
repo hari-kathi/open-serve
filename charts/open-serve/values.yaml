@@ -9,7 +9,7 @@
 image:
   registry: ghcr.io
   repository: hari-kathi/open-serve-vllm
-  tag: "0.2.0"
+  tag: ""   # empty = chart appVersion (kept in lockstep by the release workflow)
 
 # ServiceAccount used by Ray head and worker pods — e.g. for object-storage
 # access to model weights via workload identity / IRSA. Must exist in the
@@ -101,7 +101,7 @@ gateway:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-gateway
-    tag: "0.2.0"
+    tag: ""   # empty = chart appVersion (kept in lockstep by the release workflow)
     pullPolicy: IfNotPresent
   replicas: 2
   resources:
@@ -159,7 +159,7 @@ probe:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-probe
-    tag: "0.2.0"
+    tag: ""   # empty = chart appVersion (kept in lockstep by the release workflow)
     pullPolicy: IfNotPresent
   replicas: 1
   resources:
@@ -192,7 +192,7 @@ statusPage:
   image:
     registry: ghcr.io
     repository: hari-kathi/open-serve-status
-    tag: "0.2.0"
+    tag: ""   # empty = chart appVersion (kept in lockstep by the release workflow)
     pullPolicy: IfNotPresent
   replicas: 2
   # Sized for the snapshot build: daily-strip aggregation + 30-day
@@ -336,7 +336,7 @@ serveModels: {}
   #   rayVersion: "2.55.1"
   #   image:
   #     repository: "hari-kathi/open-serve-vllm"
-  #     tag: "0.2.0"
+  #     tag: ""   # empty = chart appVersion (kept in lockstep by the release workflow)
   #   routePrefix: "/"
   #   sharedMemorySize: "20Gi"
   #   # Every key under vllmArgs forwards into vLLM's own argparse

@@ -35,9 +35,6 @@ mxbai-embed-large-v1:
   description: "mxbai-embed-large-v1 English text-embedding model (1024-dim)"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   vllmArgs:
     model: "mixedbread-ai/mxbai-embed-large-v1"

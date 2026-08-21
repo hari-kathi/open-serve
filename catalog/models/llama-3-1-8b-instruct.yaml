@@ -22,9 +22,6 @@ llama-3-1-8b-instruct:
   description: "Meta Llama 3.1 8B Instruct general-purpose chat model"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "16Gi"
   vllmArgs:

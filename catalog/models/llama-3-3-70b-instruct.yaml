@@ -24,9 +24,6 @@ llama-3-3-70b-instruct:
   description: "Meta Llama 3.3 70B Instruct flagship chat model"
   type: vllm
   rayVersion: "2.55.1"
-  image:
-    repository: "hari-kathi/open-serve-vllm"
-    tag: "0.2.0"
   routePrefix: "/"
   sharedMemorySize: "32Gi"
   vllmArgs:
